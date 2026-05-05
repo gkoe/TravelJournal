@@ -1,0 +1,21 @@
+## .NET / MSBuild
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## NuGet
+*.nupkg
+
+## Rider / JetBrains
+.idea/
+
+## VS Code
+.vscode/
+
+## Secrets — NEVER commit the real config
+src/TravelJournal.Wpf/appsettings.json
+
+## Tile caches (generated, large)
+.tile-cache/

@@ -1,0 +1,9 @@
+﻿<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TravelJournal.Core/TravelJournal.Core.csproj" />
+    <Project Path="src/TravelJournal.Wpf/TravelJournal.Wpf.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TravelJournal.Core.Tests/TravelJournal.Core.Tests.csproj" />
+  </Folder>
+</Solution>

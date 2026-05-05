@@ -1,0 +1,212 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ── Colors ─────────────────────────────────────────── -->
+    <Color x:Key="AccentColor">#1E5F8E</Color>
+    <Color x:Key="StateSelectedColor">#2E7D32</Color>
+    <Color x:Key="StateDeselectedColor">#C62828</Color>
+    <Color x:Key="StateNoneColor">#9E9E9E</Color>
+    <Color x:Key="BackgroundColor">#F5F5F5</Color>
+    <Color x:Key="SidebarColor">#EEEEEE</Color>
+
+    <!-- ── Brushes ────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="AccentBrush"           Color="{StaticResource AccentColor}"/>
+    <SolidColorBrush x:Key="StateSelectedBrush"    Color="{StaticResource StateSelectedColor}"/>
+    <SolidColorBrush x:Key="StateDeselectedBrush"  Color="{StaticResource StateDeselectedColor}"/>
+    <SolidColorBrush x:Key="StateNoneBrush"        Color="{StaticResource StateNoneColor}"/>
+    <SolidColorBrush x:Key="BackgroundBrush"       Color="{StaticResource BackgroundColor}"/>
+    <SolidColorBrush x:Key="SidebarBrush"          Color="{StaticResource SidebarColor}"/>
+    <SolidColorBrush x:Key="SeparatorBrush"          Color="#CCCCCC"/>
+    <SolidColorBrush x:Key="InfoPanelBackgroundBrush" Color="#EEEEEE"/>
+    <!-- ListBox-Item Hervorhebung -->
+    <SolidColorBrush x:Key="SelectionBackgroundBrush" Color="#2E1E5F8E"/>  <!-- Akzentblau 18 % -->
+    <SolidColorBrush x:Key="HoverBackgroundBrush"     Color="#0F000000"/>  <!-- Schwarz 6 % -->
+
+    <!-- ── Converters ─────────────────────────────────────── -->
+    <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+
+    <!-- ── Buttons ────────────────────────────────────────── -->
+    <Style x:Key="BaseButtonStyle" TargetType="Button">
+        <Setter Property="FontFamily"          Value="Segoe UI"/>
+        <Setter Property="Padding"             Value="10,6"/>
+        <Setter Property="Cursor"              Value="Hand"/>
+        <Setter Property="BorderThickness"     Value="0"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+    </Style>
+
+    <Style x:Key="PrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource BaseButtonStyle}">
+        <Setter Property="Background"  Value="{StaticResource AccentBrush}"/>
+        <Setter Property="Foreground"  Value="White"/>
+        <Setter Property="FontWeight"  Value="SemiBold"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#1A527A"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="SecondaryButtonStyle" TargetType="Button" BasedOn="{StaticResource BaseButtonStyle}">
+        <Setter Property="Background" Value="#DDDDDD"/>
+        <Setter Property="Foreground" Value="#333333"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#CCCCCC"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="BulkButtonStyle" TargetType="Button" BasedOn="{StaticResource BaseButtonStyle}">
+        <Setter Property="Background" Value="#FFF3E0"/>
+        <Setter Property="Foreground" Value="#E65100"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#FFE0B2"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- ── Filter-RadioButton als Button ─────────────────── -->
+    <Style x:Key="FilterRadioStyle" TargetType="RadioButton">
+        <Setter Property="FontFamily"              Value="Segoe UI"/>
+        <Setter Property="Padding"                 Value="10,5"/>
+        <Setter Property="Margin"                  Value="0,2"/>
+        <Setter Property="HorizontalAlignment"     Value="Stretch"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="Cursor"                  Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="4"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentBrush}"/>
+                            <Setter Property="Foreground" Value="White"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#DDDDDD"/>
+                        </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsChecked" Value="True"/>
+                                <Condition Property="IsMouseOver" Value="True"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="Bd" Property="Background" Value="#1A527A"/>
+                        </MultiTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ── Feature 4: ListBoxItem mit Fokus-Hervorhebung ─── -->
+    <Style TargetType="ListBoxItem">
+        <Setter Property="Padding"                   Value="0"/>
+        <Setter Property="Margin"                    Value="0"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="Background"                Value="Transparent"/>
+        <Setter Property="Focusable"                 Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="OuterBorder"
+                            BorderThickness="2"
+                            BorderBrush="Transparent"
+                            CornerRadius="4"
+                            Background="{TemplateBinding Background}"
+                            Padding="2"
+                            Margin="2">
+                        <ContentPresenter/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="OuterBorder" Property="BorderBrush"
+                                    Value="{StaticResource AccentBrush}"/>
+                            <Setter TargetName="OuterBorder" Property="Background"
+                                    Value="{StaticResource SelectionBackgroundBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="OuterBorder" Property="Background"
+                                    Value="{StaticResource HoverBackgroundBrush}"/>
+                        </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsSelected"   Value="True"/>
+                                <Condition Property="IsMouseOver"  Value="True"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="OuterBorder" Property="Background"
+                                    Value="{StaticResource SelectionBackgroundBrush}"/>
+                            <Setter TargetName="OuterBorder" Property="BorderBrush"
+                                    Value="{StaticResource AccentBrush}"/>
+                        </MultiTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ── Detail-Bereich Typografie ────────────────────── -->
+    <Style x:Key="DetailTitleText" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize"   Value="16"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <Style x:Key="DetailLocationText" TargetType="TextBlock">
+        <Setter Property="FontFamily"  Value="Segoe UI"/>
+        <Setter Property="FontSize"    Value="13"/>
+        <Setter Property="Foreground"  Value="{StaticResource AccentBrush}"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+
+    <Style x:Key="DetailDescriptionText" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize"   Value="12"/>
+    </Style>
+
+    <Style x:Key="DetailMetaText" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize"   Value="11"/>
+        <Setter Property="Opacity"    Value="0.7"/>
+    </Style>
+
+    <Style x:Key="DetailLabelText" TargetType="TextBlock">
+        <Setter Property="FontFamily"  Value="Segoe UI"/>
+        <Setter Property="FontSize"    Value="10"/>
+        <Setter Property="FontWeight"  Value="SemiBold"/>
+        <Setter Property="Opacity"     Value="0.55"/>
+        <Setter Property="Margin"      Value="0,4,0,2"/>
+    </Style>
+
+    <!-- ── TextBox ────────────────────────────────────────── -->
+    <Style TargetType="TextBox">
+        <Setter Property="FontFamily"    Value="Segoe UI"/>
+        <Setter Property="Padding"       Value="6,4"/>
+        <Setter Property="BorderBrush"   Value="#BBBBBB"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+
+    <!-- ── TextBlock ──────────────────────────────────────── -->
+    <Style TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize"   Value="13"/>
+    </Style>
+
+    <!-- ── Window ─────────────────────────────────────────── -->
+    <Style TargetType="Window">
+        <Setter Property="Background"  Value="{StaticResource BackgroundBrush}"/>
+        <Setter Property="FontFamily"  Value="Segoe UI"/>
+    </Style>
+
+</ResourceDictionary>

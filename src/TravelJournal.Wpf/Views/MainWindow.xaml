@@ -1,0 +1,554 @@
+﻿<Window x:Class="TravelJournal.Wpf.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:TravelJournal.Wpf.ViewModels"
+        xmlns:views="clr-namespace:TravelJournal.Wpf.Views"
+        xmlns:conv="clr-namespace:TravelJournal.Wpf.Converters"
+        xmlns:controls="clr-namespace:TravelJournal.Wpf.Controls"
+        Title="Travel Journal" Icon="/TravelJournal.ico"
+        Width="1280" Height="800" MinWidth="700" MinHeight="500"
+        Background="{StaticResource BackgroundBrush}">
+
+    <Window.Resources>
+        <conv:PhotoStateToBrushConverter      x:Key="PhotoStateToBrushConverter"/>
+        <conv:NullableDoubleToStringConverter x:Key="NullableDoubleToStringConverter"/>
+        <conv:EnumToBoolConverter             x:Key="EnumToBoolConverter"/>
+        <conv:NullOrEmptyToVisibilityConverter x:Key="NullOrEmptyToVisibilityConverter"/>
+
+        <!-- ── Galerie-Listen-Templates ────────────────────── -->
+
+        <DataTemplate x:Key="PhotoListTemplate" DataType="{x:Type vm:PhotoViewModel}">
+            <Border BorderThickness="2" CornerRadius="3" Margin="2,2,2,0"
+                    BorderBrush="{Binding State, Converter={StaticResource PhotoStateToBrushConverter}}"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListBox}}">
+                <Border.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Auswählen (1)"
+                                  Command="{Binding PlacementTarget.Tag.SetStateSelectedCommand,
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                  CommandParameter="{Binding}"/>
+                        <MenuItem Header="Abwählen (2)"
+                                  Command="{Binding PlacementTarget.Tag.SetStateDeselectedCommand,
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                  CommandParameter="{Binding}"/>
+                        <MenuItem Header="Offen (0)"
+                                  Command="{Binding PlacementTarget.Tag.SetStateNoneCommand,
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                  CommandParameter="{Binding}"/>
+                        <Separator/>
+                        <MenuItem Header="Startfolie (3)"
+                                  Command="{Binding PlacementTarget.Tag.SetStateStartCommand,
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                  CommandParameter="{Binding}"/>
+                        <MenuItem Header="Schlussfolie (4)"
+                                  Command="{Binding PlacementTarget.Tag.SetStateEndCommand,
+                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                  CommandParameter="{Binding}"/>
+                    </ContextMenu>
+                </Border.ContextMenu>
+                <Grid Height="72">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="96"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Image Grid.Column="0" Source="{Binding Thumbnail}"
+                           Stretch="UniformToFill" Width="96" Height="72"
+                           RenderOptions.BitmapScalingMode="HighQuality"/>
+
+                    <StackPanel Grid.Column="1" Margin="6,4,4,4" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Filename}"
+                                   TextTrimming="CharacterEllipsis"
+                                   FontWeight="SemiBold" FontSize="12"/>
+                        <TextBlock Text="{Binding DateTime, StringFormat='{}{0:dd.MM.  HH:mm}'}"
+                                   FontSize="10" Opacity="0.7"/>
+                        <TextBlock Text="{Binding Location}"
+                                   FontSize="10" Opacity="0.7"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+
+                    <!-- Badges oben rechts -->
+                    <StackPanel Grid.Column="1" HorizontalAlignment="Right"
+                                VerticalAlignment="Top" Orientation="Horizontal" Margin="0,3,3,0">
+                        <Border Background="#1565C0" CornerRadius="2" Padding="3,1" Margin="2,0,0,0"
+                                Visibility="{Binding IsNew, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock Text="NEU" Foreground="White" FontSize="8" FontWeight="Bold"/>
+                        </Border>
+                        <Border Background="#E65100" CornerRadius="2" Padding="3,1" Margin="2,0,0,0"
+                                Visibility="{Binding IsMissing, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock Text="FEHLT" Foreground="White" FontSize="8" FontWeight="Bold"/>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Rotation-Badge unten rechts -->
+                    <Border Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                            Background="{StaticResource AccentBrush}" CornerRadius="2"
+                            Padding="3,1" Margin="0,0,3,3"
+                            Visibility="{Binding HasPendingRotation, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <TextBlock Text="↻" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                    </Border>
+
+                    <!-- State-Icon unten links -->
+                    <Border Grid.Column="0" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                            Background="#88000000" CornerRadius="0,3,0,0" Padding="3,1">
+                        <TextBlock FontSize="11" Foreground="White">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding State}" Value="Selected">
+                                            <Setter Property="Text" Value="✓"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding State}" Value="Deselected">
+                                            <Setter Property="Text" Value="✗"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding State}" Value="None">
+                                            <Setter Property="Text" Value="○"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding State}" Value="Start">
+                                            <Setter Property="Text" Value="▶"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding State}" Value="End">
+                                            <Setter Property="Text" Value="■"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Border>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="MapListTemplate" DataType="{x:Type vm:MapItemViewModel}">
+            <Border BorderThickness="2" CornerRadius="3" Margin="2,2,2,0"
+                    BorderBrush="{StaticResource AccentBrush}">
+                <Grid Height="72">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="96"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Image Grid.Column="0" Source="{Binding Thumbnail}"
+                           Stretch="UniformToFill" Width="96" Height="72"
+                           RenderOptions.BitmapScalingMode="HighQuality"/>
+
+                    <StackPanel Grid.Column="1" Margin="6,4,4,4" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding DisplayTitle}"
+                                   TextTrimming="CharacterEllipsis"
+                                   FontWeight="SemiBold" FontSize="12"/>
+                    </StackPanel>
+
+                    <!-- KARTE-Badge oben rechts -->
+                    <Border Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Background="{StaticResource AccentBrush}" CornerRadius="2"
+                            Padding="3,1" Margin="0,3,3,0">
+                        <TextBlock Text="KARTE" Foreground="White" FontSize="8" FontWeight="Bold"/>
+                    </Border>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- ── Listen-Selektor (referenziert nur die obigen Listen-Templates) ── -->
+
+        <views:GalleryItemTemplateSelector x:Key="ListTemplateSelector"
+            PhotoTemplate="{StaticResource PhotoListTemplate}"
+            MapTemplate="{StaticResource MapListTemplate}"/>
+
+        <!-- ── Detail-Templates ─────────────────────────────── -->
+
+        <DataTemplate x:Key="PhotoDetailTemplate" DataType="{x:Type vm:PhotoViewModel}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Background="#111111">
+                    <Grid>
+                        <Image Source="{Binding DetailImage}"
+                               Stretch="Uniform"
+                               RenderOptions.BitmapScalingMode="HighQuality">
+                            <Image.LayoutTransform>
+                                <RotateTransform Angle="{Binding PendingRotation}"/>
+                            </Image.LayoutTransform>
+                        </Image>
+                        <controls:CropOverlay
+                            ImagePixelWidth="{Binding PixelWidth}"
+                            ImagePixelHeight="{Binding PixelHeight}"
+                            SelectedCropRect="{Binding DataContext.CropRect,
+                                               RelativeSource={RelativeSource AncestorType=Window}}"
+                            ConfirmCommand="{Binding DataContext.ConfirmCropCommand,
+                                            RelativeSource={RelativeSource AncestorType=Window}}"/>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="1"
+                        Padding="16,10,16,10"
+                        Background="{StaticResource InfoPanelBackgroundBrush}"
+                        BorderThickness="0,1,0,0"
+                        BorderBrush="{StaticResource SeparatorBrush}">
+                    <StackPanel>
+
+                        <TextBlock Text="TITEL" Style="{StaticResource DetailLabelText}"/>
+                        <TextBox Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}"
+                                 FontSize="16" FontWeight="SemiBold"
+                                 Margin="0,2,0,6">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                    <Style.Triggers>
+                                        <Trigger Property="Text" Value="">
+                                            <Setter Property="Background">
+                                                <Setter.Value>
+                                                    <VisualBrush Stretch="None" AlignmentX="Left" AlignmentY="Center">
+                                                        <VisualBrush.Visual>
+                                                            <TextBlock Text="Titel eingeben…"
+                                                                       Foreground="#AAAAAA"
+                                                                       FontStyle="Italic"
+                                                                       FontSize="16"
+                                                                       Margin="7,0,0,0"/>
+                                                        </VisualBrush.Visual>
+                                                    </VisualBrush>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+
+                        <TextBlock Text="{Binding Location}"
+                                   Style="{StaticResource DetailLocationText}"
+                                   Margin="0,0,0,6"
+                                   Visibility="{Binding Location,
+                                       Converter={StaticResource NullOrEmptyToVisibilityConverter}}"/>
+
+                        <TextBlock Text="BESCHREIBUNG" Style="{StaticResource DetailLabelText}"/>
+                        <TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
+                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                 MaxHeight="100"
+                                 VerticalScrollBarVisibility="Auto"
+                                 FontSize="12"
+                                 Margin="0,2,0,8"/>
+
+                        <TextBlock Style="{StaticResource DetailMetaText}" TextWrapping="Wrap" Margin="0,0,0,8">
+                            <Run Text="{Binding DateTimeFormatted, Mode=OneWay}"/>
+                            <Run Text=" · "/>
+                            <Run Text="{Binding CoordinatesFormatted, Mode=OneWay}"/>
+                            <Run Text=" · "/>
+                            <Run Text="{Binding AltitudeFormatted, Mode=OneWay}"/>
+                            <Run Text=" · "/>
+                            <Run Text="{Binding PixelDimensionsFormatted, Mode=OneWay}"/>
+                            <Run Text=" · "/>
+                            <Run Text="{Binding FileSizeFormatted, Mode=OneWay}"/>
+                        </TextBlock>
+
+                        <WrapPanel>
+                            <TextBlock Text="STATUS" Style="{StaticResource DetailLabelText}"
+                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <RadioButton Content="Ausgewählt" GroupName="DetailState"
+                                         Margin="0,0,10,0" FontSize="11"
+                                         IsChecked="{Binding State, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Selected}"/>
+                            <RadioButton Content="Abgewählt" GroupName="DetailState"
+                                         Margin="0,0,10,0" FontSize="11"
+                                         IsChecked="{Binding State, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Deselected}"/>
+                            <RadioButton Content="Offen" GroupName="DetailState"
+                                         Margin="0,0,10,0" FontSize="11"
+                                         IsChecked="{Binding State, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=None}"/>
+                            <RadioButton Content="▶ Start" GroupName="DetailState"
+                                         Margin="0,0,10,0" FontSize="11"
+                                         IsChecked="{Binding State, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Start}"/>
+                            <RadioButton Content="■ Ende" GroupName="DetailState"
+                                         FontSize="11"
+                                         IsChecked="{Binding State, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=End}"/>
+                        </WrapPanel>
+
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="MapDetailTemplate" DataType="{x:Type vm:MapItemViewModel}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Background="#111111">
+                    <Image Source="{Binding DetailImage}"
+                           Stretch="Uniform"
+                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                </Border>
+
+                <Border Grid.Row="1"
+                        Padding="16,10,16,10"
+                        Background="{StaticResource InfoPanelBackgroundBrush}"
+                        BorderThickness="0,1,0,0"
+                        BorderBrush="{StaticResource SeparatorBrush}">
+                    <StackPanel>
+                        <TextBlock Text="{Binding DisplayTitle}"
+                                   FontSize="16" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                        <TextBlock Text="Automatisch generierte Karte des Routenabschnitts bis zu diesem Stopp."
+                                   Style="{StaticResource DetailMetaText}"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </DataTemplate>
+
+        <!-- ── Detail-Selektor (nach den Detail-Templates, damit StaticResource aufgelöst wird) ── -->
+
+        <views:GalleryItemTemplateSelector x:Key="DetailTemplateSelector"
+            PhotoTemplate="{StaticResource PhotoDetailTemplate}"
+            MapTemplate="{StaticResource MapDetailTemplate}"/>
+
+    </Window.Resources>
+
+    <Window.InputBindings>
+        <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCsvCommand}"/>
+        <KeyBinding Key="F5"                    Command="{Binding RescanCommand}"/>
+        <KeyBinding Key="M" Modifiers="Control" Command="{Binding GenerateMapsCommand}"/>
+        <KeyBinding Key="P" Modifiers="Control" Command="{Binding StartPresentationCommand}"/>
+    </Window.InputBindings>
+
+    <DockPanel>
+
+        <!-- ── Statusleiste ── -->
+        <StatusBar DockPanel.Dock="Bottom" Background="{StaticResource SidebarBrush}"
+                   BorderThickness="0,1,0,0" BorderBrush="{StaticResource SeparatorBrush}">
+            <StatusBarItem>
+                <TextBlock Text="{Binding StatusText}" FontSize="12"/>
+            </StatusBarItem>
+            <Separator Visibility="{Binding BackgroundActivityText,
+                           Converter={StaticResource NullOrEmptyToVisibilityConverter}}"/>
+            <StatusBarItem>
+                <TextBlock Text="{Binding BackgroundActivityText}"
+                           Foreground="{StaticResource AccentBrush}"
+                           FontSize="12"
+                           Visibility="{Binding BackgroundActivityText,
+                               Converter={StaticResource NullOrEmptyToVisibilityConverter}}"/>
+            </StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Right">
+                <ProgressBar IsIndeterminate="True" Width="80" Height="10"
+                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}"/>
+            </StatusBarItem>
+        </StatusBar>
+
+        <!-- ── Haupt-Grid: 3 Spalten ── -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="250" MinWidth="200"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="290" MinWidth="220"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ════════════════════════════════════════════
+                 SPALTE 0 — Bearbeitungsfunktionen
+                 ════════════════════════════════════════════ -->
+            <DockPanel Grid.Column="0" Background="{StaticResource SidebarBrush}">
+
+                <!-- Toolbar oben -->
+                <StackPanel DockPanel.Dock="Top" Margin="10,12,10,4">
+                    <Button Content="Ordner öffnen…"
+                            Command="{Binding OpenFolderCommand}"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            Margin="0,0,0,6"/>
+                    <Button Content="Neu scannen  (F5)"
+                            Command="{Binding RescanCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Margin="0,0,0,4"/>
+                    <Button Content="CSV speichern  (Strg+S)"
+                            Command="{Binding SaveCsvCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Margin="0,0,0,4"/>
+                    <Button Command="{Binding ToggleGeocodingCommand}"
+                            Content="{Binding GeocodingButtonText}"
+                            ToolTip="Ermittelt für alle ausgewählten Fotos mit GPS-Daten den Ortsnamen via OpenStreetMap. Ein zweiter Klick bricht die laufende Abfrage ab."
+                            Margin="0,0,0,4">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsGeocodingRunning}" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
+
+                <!-- Export -->
+                <StackPanel DockPanel.Dock="Top" Margin="10,0,10,4">
+                    <Separator Background="{StaticResource SeparatorBrush}" Margin="0,4,0,6"/>
+                    <TextBlock Text="EXPORT" FontSize="10" FontWeight="SemiBold"
+                               Foreground="#888888" Margin="0,0,0,6"/>
+
+                    <TextBlock Text="KARTEN-STIL" Style="{StaticResource DetailLabelText}"/>
+                    <ComboBox ItemsSource="{Binding AvailableMapStyles}"
+                              SelectedValuePath="Id"
+                              DisplayMemberPath="DisplayLabel"
+                              SelectedValue="{Binding SelectedMapStyleId, Mode=TwoWay}"
+                              ToolTip="Wirkt sich auf neu generierte Karten aus."
+                              Margin="0,2,0,8"/>
+
+                    <TextBlock Text="SPRACHE" Style="{StaticResource DetailLabelText}"/>
+                    <ComboBox ItemsSource="{Binding AvailableLanguages}"
+                              SelectedItem="{Binding SelectedLanguage, Mode=TwoWay}"
+                              ToolTip="Sprache der Ortsbeschriftungen auf der Karte."
+                              Margin="0,2,0,8"/>
+
+                    <TextBlock Style="{StaticResource DetailLabelText}">
+                        <Run Text="RAND"/>
+                        <Run Text="{Binding BoundsPaddingPercent, StringFormat='({0} %)'}"/>
+                    </TextBlock>
+                    <Slider Minimum="0" Maximum="40" TickFrequency="2" IsSnapToTickEnabled="True"
+                            Value="{Binding BoundsPaddingPercent, Mode=TwoWay}"
+                            ToolTip="Wie viel freier Rand um die Route herum dargestellt wird."
+                            Margin="0,2,0,12"/>
+
+                    <Button Content="Präsentation starten  (Strg+P)"
+                            Command="{Binding StartPresentationCommand}"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            ToolTip="Spielt ausgewählte Fotos und generierte Karten in chronologischer Reihenfolge im Vollbild ab. Esc beendet die Präsentation."
+                            Margin="0,0,0,8"/>
+
+                    <Button Command="{Binding GenerateMapsCommand}"
+                            Margin="0,0,0,4"
+                            ToolTip="Erzeugt für jeden erkannten Stopp eine Karte mit den aktuellen Einstellungen. Die Karten erscheinen direkt im Foto-Ordner. (Strg+M)">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
+                                <Setter Property="Content" Value="Karten generieren  (Strg+M)"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsGeneratingMaps}" Value="True">
+                                        <Setter Property="Content" Value="Abbrechen"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
+
+                <!-- Bulk-Aktion -->
+                <StackPanel DockPanel.Dock="Top" Margin="10,0,10,4">
+                    <Separator Background="{StaticResource SeparatorBrush}" Margin="0,4,0,6"/>
+                    <Button Content="Alle offenen abwählen"
+                            Command="{Binding DeselectAllOpenCommand}"
+                            Style="{StaticResource BulkButtonStyle}"
+                            ToolTip="Setzt alle Fotos mit Status 'Offen' auf 'Abgewählt'."/>
+                </StackPanel>
+
+                <!-- Filter -->
+                <StackPanel DockPanel.Dock="Top" Margin="10,6,10,8">
+                    <Separator Background="{StaticResource SeparatorBrush}" Margin="0,2,0,6"/>
+                    <TextBlock Text="FILTER" FontSize="10" FontWeight="SemiBold"
+                               Foreground="#888888" Margin="0,0,0,4"/>
+                    <RadioButton Content="Alle"       GroupName="Filter" Style="{StaticResource FilterRadioStyle}"
+                                 IsChecked="{Binding ActiveFilter, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=All}"/>
+                    <RadioButton Content="Offen"      GroupName="Filter" Style="{StaticResource FilterRadioStyle}"
+                                 IsChecked="{Binding ActiveFilter, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Open}"/>
+                    <RadioButton Content="Ausgewählt" GroupName="Filter" Style="{StaticResource FilterRadioStyle}"
+                                 IsChecked="{Binding ActiveFilter, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Selected}"/>
+                    <RadioButton Content="Abgewählt"  GroupName="Filter" Style="{StaticResource FilterRadioStyle}"
+                                 IsChecked="{Binding ActiveFilter, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Deselected}"/>
+                    <RadioButton Content="Neu"        GroupName="Filter" Style="{StaticResource FilterRadioStyle}"
+                                 IsChecked="{Binding ActiveFilter, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=New}"/>
+                    <RadioButton Content="Karten"     GroupName="Filter" Style="{StaticResource FilterRadioStyle}"
+                                 IsChecked="{Binding ActiveFilter, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Maps}"/>
+                </StackPanel>
+
+                <!-- Aktueller Ordner -->
+                <TextBlock DockPanel.Dock="Bottom"
+                           Text="{Binding CurrentFolder, FallbackValue='Kein Ordner geöffnet'}"
+                           TextWrapping="Wrap" Margin="10,4" Foreground="#999999" FontSize="10"
+                           ToolTip="{Binding CurrentFolder}"/>
+
+            </DockPanel>
+
+            <!-- Trennlinie 1 -->
+            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                          Background="{StaticResource SeparatorBrush}"
+                          ResizeBehavior="PreviousAndNext"/>
+
+            <!-- ════════════════════════════════════════════
+                 SPALTE 2 — Foto-/Karten-Liste
+                 ════════════════════════════════════════════ -->
+            <ListBox x:Name="PhotoList"
+                     Grid.Column="2"
+                     ItemsSource="{Binding GalleryItemsView}"
+                     SelectedItem="{Binding SelectedGalleryItem, Mode=TwoWay}"
+                     ItemTemplateSelector="{StaticResource ListTemplateSelector}"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     VirtualizingStackPanel.IsVirtualizing="True"
+                     VirtualizingStackPanel.VirtualizationMode="Recycling"
+                     Background="{StaticResource SidebarBrush}" BorderThickness="0"
+                     SelectionChanged="PhotoList_SelectionChanged">
+                <ListBox.InputBindings>
+                    <KeyBinding Key="Space"   Command="{Binding CycleSelectedPhotoStateCommand}"/>
+                    <KeyBinding Key="D1"      Command="{Binding SetStateSelectedCommand}"/>
+                    <KeyBinding Key="D2"      Command="{Binding SetStateDeselectedCommand}"/>
+                    <KeyBinding Key="D0"      Command="{Binding SetStateNoneCommand}"/>
+                    <KeyBinding Key="D3"      Command="{Binding SetStateStartCommand}"/>
+                    <KeyBinding Key="D4"      Command="{Binding SetStateEndCommand}"/>
+                    <KeyBinding Key="NumPad1" Command="{Binding SetStateSelectedCommand}"/>
+                    <KeyBinding Key="NumPad2" Command="{Binding SetStateDeselectedCommand}"/>
+                    <KeyBinding Key="NumPad0" Command="{Binding SetStateNoneCommand}"/>
+                    <KeyBinding Key="NumPad3" Command="{Binding SetStateStartCommand}"/>
+                    <KeyBinding Key="NumPad4" Command="{Binding SetStateEndCommand}"/>
+                    <KeyBinding Key="L"       Command="{Binding RotateLeftCommand}"/>
+                    <KeyBinding Key="R"       Command="{Binding RotateRightCommand}"/>
+                    <KeyBinding Key="S"       Command="{Binding SaveRotationCommand}"/>
+                    <KeyBinding Key="Delete"  Command="{Binding DeleteSelectedPhotoCommand}"/>
+                </ListBox.InputBindings>
+            </ListBox>
+
+            <!-- Trennlinie 2 -->
+            <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch"
+                          Background="{StaticResource SeparatorBrush}"
+                          ResizeBehavior="PreviousAndNext"/>
+
+            <!-- ════════════════════════════════════════════
+                 SPALTE 4 — Detail-Bereich
+                 ════════════════════════════════════════════ -->
+            <Grid Grid.Column="4">
+
+                <!-- Hinweis bei keiner Auswahl -->
+                <TextBlock Text="Kein Element ausgewählt"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="#BBBBBB" FontSize="16">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedGalleryItem}" Value="{x:Null}">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <!-- Detail-Inhalt (Foto oder Karte) -->
+                <ContentControl Content="{Binding SelectedGalleryItem}"
+                                ContentTemplateSelector="{StaticResource DetailTemplateSelector}"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch">
+                    <ContentControl.Style>
+                        <Style TargetType="ContentControl">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedGalleryItem}" Value="{x:Null}">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ContentControl.Style>
+                </ContentControl>
+
+            </Grid>
+        </Grid>
+    </DockPanel>
+</Window>
