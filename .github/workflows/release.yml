@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish (self-contained win-x64)
+        run: |
+          dotnet publish src/TravelJournal.Wpf/TravelJournal.Wpf.csproj `
+            -r win-x64 -c Release --self-contained `
+            -o dist/TravelJournal
+
+      - name: Konfigurationsvorlage hinzufügen
+        run: Copy-Item src/TravelJournal.Wpf/appsettings.example.json dist/TravelJournal/appsettings.json
+
+      - name: ZIP erstellen
+        run: Compress-Archive -Path dist/TravelJournal\* -DestinationPath "TravelJournal-${{ github.ref_name }}-win-x64.zip"
+
+      - name: GitHub Release erstellen
+        uses: softprops/action-gh-release@v2
+        with:
+          files: TravelJournal-${{ github.ref_name }}-win-x64.zip
+          generate_release_notes: true
+          body: |
+            ## Installation
+
+            1. ZIP entpacken
+            2. `appsettings.json` im entpackten Ordner öffnen und anpassen:
+               - **MapTiler:ApiKey** – kostenlosen Account auf [maptiler.com](https://cloud.maptiler.com/auth/widget) erstellen, API-Key kopieren
+               - **Nominatim:ContactEmail** – deine E-Mail-Adresse (für Reverse-Geocoding, kein Account nötig)
+            3. `TravelJournal.exe` starten — keine Installation erforderlich
+
+            > **Hinweis:** Der MapTiler Free-Plan umfasst 100.000 Tile-Anfragen/Monat, was für private Nutzung mehr als ausreicht.
