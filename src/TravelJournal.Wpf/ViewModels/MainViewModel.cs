@@ -360,6 +360,8 @@ public partial class MainViewModel : ObservableObject
         UpdateStatusText();
         DeselectAllOpenCommand.NotifyCanExecuteChanged();
         GenerateMapsCommand.NotifyCanExecuteChanged();
+        StartPresentationCommand.NotifyCanExecuteChanged();
+        ExportWebPresentationCommand.NotifyCanExecuteChanged();
     }
 
     // ── Rotation ──────────────────────────────────────────────
@@ -963,6 +965,7 @@ public partial class MainViewModel : ObservableObject
         DeselectAllOpenCommand.NotifyCanExecuteChanged();
         GenerateMapsCommand.NotifyCanExecuteChanged();
         StartPresentationCommand.NotifyCanExecuteChanged();
+        ExportWebPresentationCommand.NotifyCanExecuteChanged();
     }
 
     private async Task ScanInternalAsync(string folder)
