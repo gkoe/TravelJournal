@@ -26,7 +26,9 @@ public class ImageSharpImageRotator : IImageRotator
         try
         {
             using var image = await Image.LoadAsync(filePath, ct);
-            image.Mutate(x => x.Rotate(rotateMode));
+            // AutoOrient normalisiert zuerst die EXIF-Orientierung auf Pixelebene
+            // (setzt den Orientation-Tag danach auf Normal), dann erst drehen
+            image.Mutate(x => x.AutoOrient().Rotate(rotateMode));
             await image.SaveAsJpegAsync(tempPath, new JpegEncoder { Quality = 92 }, ct);
         }
         catch

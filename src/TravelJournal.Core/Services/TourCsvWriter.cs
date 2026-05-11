@@ -17,12 +17,12 @@ public class TourCsvWriter
     };
 
     /// <summary>
-    /// Schreibt alle Photos in eine CSV-Datei gemäß dem tour.csv-Schema.
+    /// Schreibt alle Einträge (Fotos und Karten) in eine CSV-Datei.
     /// Sortiert nach DateTime aufsteigend, Einträge ohne DateTime ans Ende.
     /// </summary>
-    public void Write(string csvPath, IEnumerable<Photo> photos)
+    public void Write(string csvPath, IEnumerable<Photo> entries)
     {
-        var sorted = photos
+        var sorted = entries
             .OrderBy(p => p.DateTime.HasValue ? 0 : 1)
             .ThenBy(p => p.DateTime);
 
@@ -59,6 +59,22 @@ internal sealed class PhotoMap : ClassMap<Photo>
             .TypeConverterOption.NullValues(string.Empty);
         Map(p => p.Location).Index(8).Name("Location")
             .TypeConverterOption.NullValues(string.Empty);
+        Map(p => p.EntryType).Index(9).Name("EntryType")
+            .TypeConverter<EntryTypeIntConverter>();
+    }
+}
+
+internal sealed class EntryTypeIntConverter : CsvHelper.TypeConversion.DefaultTypeConverter
+{
+    public override string? ConvertToString(object? value, IWriterRow row, MemberMapData memberMapData)
+        => ((int)(EntryType)(value ?? EntryType.Photo)).ToString();
+
+    public override object? ConvertFromString(string? text, IReaderRow row, MemberMapData memberMapData)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return EntryType.Photo;
+        if (int.TryParse(text, out var val) && Enum.IsDefined(typeof(EntryType), val))
+            return (EntryType)val;
+        return EntryType.Photo;
     }
 }
 

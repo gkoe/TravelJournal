@@ -1,9 +1,11 @@
-﻿<Solution>
+<Solution>
   <Folder Name="/src/">
     <Project Path="src/TravelJournal.Core/TravelJournal.Core.csproj" />
     <Project Path="src/TravelJournal.Wpf/TravelJournal.Wpf.csproj" />
+    <Project Path="src/TravelJournal.WebExporter/TravelJournal.WebExporter.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/TravelJournal.Core.Tests/TravelJournal.Core.Tests.csproj" />
+    <Project Path="tests/TravelJournal.WebExporter.Tests/TravelJournal.WebExporter.Tests.csproj" />
   </Folder>
 </Solution>

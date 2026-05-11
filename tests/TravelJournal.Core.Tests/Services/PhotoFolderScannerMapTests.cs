@@ -1,4 +1,5 @@
-﻿using TravelJournal.Core.Services;
+using TravelJournal.Core.Models;
+using TravelJournal.Core.Services;
 using FluentAssertions;
 
 namespace TravelJournal.Core.Tests.Services;
@@ -16,7 +17,7 @@ public class PhotoFolderScannerMapTests : IDisposable
     }
 
     [Fact]
-    public void Scan_FolderWithTwoPhotosAndOneMapPng_MapsCount1PhotosCount2()
+    public void Scan_FolderWithTwoPhotosAndOneMapPng_PhotosCount3()
     {
         CreateJpeg("img1.jpg");
         CreateJpeg("img2.jpg");
@@ -24,8 +25,7 @@ public class PhotoFolderScannerMapTests : IDisposable
 
         var result = _scanner.Scan(_tempFolder);
 
-        result.Photos.Should().HaveCount(2);
-        result.Maps.Should().HaveCount(1);
+        result.Photos.Should().HaveCount(3);
     }
 
     [Fact]
@@ -35,40 +35,62 @@ public class PhotoFolderScannerMapTests : IDisposable
 
         var result = _scanner.Scan(_tempFolder);
 
-        result.Maps.Should().HaveCount(1);
-        var map = result.Maps[0];
+        var map = result.Photos.Should().ContainSingle(p => p.Filename == "map_2026-04-12T13-47-22.png").Subject;
         map.DateTime.Should().Be(new DateTime(2026, 4, 12, 13, 47, 22));
-        map.Filename.Should().Be("map_2026-04-12T13-47-22.png");
+        map.EntryType.Should().Be(EntryType.Map);
     }
 
     [Fact]
-    public void Scan_PngWithoutMapPrefix_NotInMaps()
+    public void Scan_MapPngWithLocationSuffix_DateTimeParsedCorrectly()
     {
-        CreateMapPng("screenshot.png");  // kein map_-Präfix
+        CreateMapPng("map_2026-04-12T13-47-22_Wien.png");
 
         var result = _scanner.Scan(_tempFolder);
 
-        result.Maps.Should().BeEmpty();
+        var map = result.Photos.Should().ContainSingle(p => p.Filename == "map_2026-04-12T13-47-22_Wien.png").Subject;
+        map.DateTime.Should().Be(new DateTime(2026, 4, 12, 13, 47, 22));
+        map.EntryType.Should().Be(EntryType.Map);
     }
 
     [Fact]
-    public void Scan_MapPngIsNotAddedToPhotos()
+    public void Scan_PngWithoutMapPrefix_NotInPhotos()
+    {
+        CreateMapPng("screenshot.png");
+
+        var result = _scanner.Scan(_tempFolder);
+
+        result.Photos.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Scan_MapPngInPhotos_HasEntryTypeMap()
     {
         CreateJpeg("img1.jpg");
         CreateMapPng("map_2026-04-12T13-47-22.png");
 
         var result = _scanner.Scan(_tempFolder);
 
-        result.Photos.Should().HaveCount(1);
-        result.Photos[0].Filename.Should().Be("img1.jpg");
+        result.Photos.Should().Contain(p => p.EntryType == EntryType.Map && p.Filename == "map_2026-04-12T13-47-22.png");
+        result.Photos.Should().Contain(p => p.EntryType != EntryType.Map && p.Filename == "img1.jpg");
     }
 
     [Fact]
-    public void Scan_EmptyFolder_MapsEmpty()
+    public void Scan_EmptyFolder_PhotosEmpty()
     {
         var result = _scanner.Scan(_tempFolder);
 
-        result.Maps.Should().BeEmpty();
+        result.Photos.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Scan_MapPngWithoutCsvEntry_StateIsNone()
+    {
+        CreateMapPng("map_2026-04-12T13-47-22.png");
+
+        var result = _scanner.Scan(_tempFolder);
+
+        var map = result.Photos.Single(p => p.EntryType == EntryType.Map);
+        map.State.Should().Be(PhotoState.None);
     }
 
     private void CreateJpeg(string filename)
@@ -79,7 +101,7 @@ public class PhotoFolderScannerMapTests : IDisposable
 
     private static byte[] CreateMinimalPng()
     {
-        // Minimal 1×1 PNG (89 bytes, transparent pixel)
+        // Minimal 1×1 PNG (transparent pixel)
         return Convert.FromBase64String(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
     }

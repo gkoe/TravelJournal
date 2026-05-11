@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{{TITLE}}</title>
+  <link rel="stylesheet" href="web/style.css">
+</head>
+<body>
+  <main id="stage">
+    <img id="slide-a" alt="" />
+    <img id="slide-b" alt="" aria-hidden="true" />
+
+    <section id="overlay" aria-hidden="true">
+      <p id="overlay-location"></p>
+      <p id="overlay-datetime"></p>
+    </section>
+
+    <div id="hint">Esc · Space · ← → · F</div>
+    <div id="finish" hidden>Ende &mdash; F5 zum Wiederholen</div>
+  </main>
+
+  <script>
+  window.__TOUR__ = {{TOUR_JSON}};
+  </script>
+  <script src="web/app.js"></script>
+</body>
+</html>

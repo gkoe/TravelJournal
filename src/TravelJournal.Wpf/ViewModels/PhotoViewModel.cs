@@ -27,13 +27,15 @@ public partial class PhotoViewModel : ObservableObject, IGalleryItem
 
     public bool MatchesFilter(PhotoFilter filter) => filter switch
     {
-        PhotoFilter.Open       => State == PhotoState.None,
-        PhotoFilter.Selected   => State == PhotoState.Selected,
-        PhotoFilter.Deselected => State == PhotoState.Deselected,
+        PhotoFilter.Open       => State == PhotoState.None   && !IsMapPhoto,
+        PhotoFilter.Selected   => State == PhotoState.Selected && !IsMapPhoto,
+        PhotoFilter.Deselected => State == PhotoState.Deselected && !IsMapPhoto,
         PhotoFilter.New        => IsNew,
-        PhotoFilter.Maps       => false,
+        PhotoFilter.Maps       => IsMapPhoto,
         _                      => true
     };
+
+    public bool IsMapPhoto => _photo.EntryType == EntryType.Map;
 
     // ── Read-only Projektionen ────────────────────────────────
     public string    Filename    => _photo.Filename;

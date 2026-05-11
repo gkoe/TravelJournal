@@ -15,7 +15,7 @@ public class TourCsvWriterTests : IDisposable
         _writer.Write(_tempPath, []);
 
         var lines = File.ReadAllLines(_tempPath);
-        lines[0].Should().Be("Filename;DateTime;Latitude;Longitude;Altitude;State;Title;Description;Location");
+        lines[0].Should().Be("Filename;DateTime;Latitude;Longitude;Altitude;State;Title;Description;Location;EntryType");
     }
 
     [Fact]
@@ -39,7 +39,7 @@ public class TourCsvWriterTests : IDisposable
         _writer.Write(_tempPath, photos);
 
         var lines = File.ReadAllLines(_tempPath);
-        lines[1].Should().Be("A.jpg;2026-04-12T09:00:00;47.3;8.5;400;1;Start;Beschreibung;");
+        lines[1].Should().Be("A.jpg;2026-04-12T09:00:00;47.3;8.5;400;1;Start;Beschreibung;;0");
     }
 
     [Fact]
@@ -76,6 +76,7 @@ public class TourCsvWriterTests : IDisposable
         cols[1].Should().BeEmpty();
         cols[2].Should().BeEmpty();
         cols[6].Should().BeEmpty();
+        cols[9].Should().Be("0");
     }
 
     [Fact]

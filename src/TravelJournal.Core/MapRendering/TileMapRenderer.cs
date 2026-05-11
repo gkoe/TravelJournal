@@ -2,6 +2,7 @@
 using TravelJournal.Core.MapRendering.Models;
 using TravelJournal.Core.MapRendering.TileSources;
 using TravelJournal.Core.Models;
+using TravelJournal.Core.Utilities;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing;
@@ -26,7 +27,7 @@ public sealed class TileMapRenderer : IMapRenderer
         _options    = options;
     }
 
-    public async Task<int> RenderAllAsync(
+    public async Task<MapRenderResult> RenderAllAsync(
         IReadOnlyList<Photo> allPhotosWithGps,
         string outputFolder,
         IProgress<MapRenderProgress>? progress = null,
@@ -38,7 +39,7 @@ public sealed class TileMapRenderer : IMapRenderer
             .OrderBy(p => p.DateTime)
             .ToList();
 
-        if (gpsPhotos.Count < 2) return 0;
+        if (gpsPhotos.Count < 2) return new MapRenderResult(0, Array.Empty<Photo>());
 
         // Bounds and zoom derived from ALL GPS photos
         var rawBounds = MapBounds.FromPhotos(gpsPhotos);
@@ -125,11 +126,13 @@ public sealed class TileMapRenderer : IMapRenderer
             .Where(p => p.State == PhotoState.Selected)
             .ToList();
 
-        var stops = _stopDetector.DetectStops(selectedSorted, _options.StopThreshold, _options.AddFinalSummaryMap);
-        if (stops.Count == 0) return 0;
+        var rawStops = _stopDetector.DetectStops(selectedSorted, _options.StopThreshold, _options.AddFinalSummaryMap);
+        var stops    = DeduplicateConsecutiveLocations(rawStops);
+        if (stops.Count == 0) return new MapRenderResult(0, Array.Empty<Photo>());
 
         Directory.CreateDirectory(outputFolder);
-        int rendered = 0;
+        int rendered   = 0;
+        var mapPhotos  = new List<Photo>(stops.Count);
 
         for (int s = 0; s < stops.Count; s++)
         {
@@ -164,20 +167,77 @@ public sealed class TileMapRenderer : IMapRenderer
                 MapStyle.CurrentStopRadius, MapStyle.CurrentStopFill,
                 MapStyle.CurrentStopBorder, MapStyle.CurrentStopBorderWidth);
 
-            var filename   = $"map_{stop.Timestamp:yyyy-MM-ddTHH-mm-ss}.png";
+            var filename   = BuildMapFilename(stop);
             var outputPath = IoPath.Combine(outputFolder, filename);
             await img.SaveAsPngAsync(outputPath, ct);
-            File.SetLastWriteTime(outputPath, stop.Timestamp);
-            File.SetCreationTime(outputPath, stop.Timestamp);
+
+            var mapTimestamp = ComputeMapTimestamp(stop, allPhotosWithGps);
+            File.SetLastWriteTime(outputPath, mapTimestamp);
+            File.SetCreationTime(outputPath, mapTimestamp);
+
+            mapPhotos.Add(new Photo
+            {
+                EntryType = EntryType.Map,
+                Filename  = filename,
+                DateTime  = mapTimestamp,
+                Location  = stop.Location,
+                State     = PhotoState.Selected,
+            });
 
             rendered++;
             progress?.Report(new MapRenderProgress("render", rendered, stops.Count, $"Karte {rendered}/{stops.Count}"));
         }
 
-        return rendered;
+        return new MapRenderResult(rendered, mapPhotos);
+    }
+
+    private static string BuildMapFilename(StopPoint stop)
+    {
+        var safeOrt = FilenameSafeName.FromLocation(stop.Location);
+        return string.IsNullOrEmpty(safeOrt)
+            ? $"map_{stop.Timestamp:yyyy-MM-ddTHH-mm-ss}.png"
+            : $"map_{stop.Timestamp:yyyy-MM-ddTHH-mm-ss}_{safeOrt}.png";
+    }
+
+    private static DateTime ComputeMapTimestamp(StopPoint stop, IReadOnlyList<Photo> allPhotos)
+    {
+        // Final-summary is a tour wrap-up — keep it at the end (stop.Timestamp = last photo + 1s)
+        if (stop.IsFinalSummary)
+            return stop.Timestamp;
+
+        // Intermediate stop: place map 1 second before first photo at this location
+        var safe = FilenameSafeName.FromLocation(stop.Location);
+        if (!string.IsNullOrEmpty(safe))
+        {
+            var firstAtLocation = allPhotos
+                .Where(p => string.Equals(
+                    FilenameSafeName.FromLocation(p.Location), safe, StringComparison.Ordinal)
+                    && p.DateTime.HasValue)
+                .OrderBy(p => p.DateTime)
+                .FirstOrDefault();
+            if (firstAtLocation?.DateTime is { } dt)
+                return dt.AddSeconds(-1);
+        }
+        return stop.Timestamp;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────
+
+    private static IReadOnlyList<StopPoint> DeduplicateConsecutiveLocations(
+        IReadOnlyList<StopPoint> stops)
+    {
+        var result   = new List<StopPoint>();
+        string? prev = null;
+        foreach (var stop in stops)
+        {
+            var safe = FilenameSafeName.FromLocation(stop.Location);
+            if (result.Count > 0 && string.Equals(safe, prev, StringComparison.Ordinal))
+                continue;
+            result.Add(stop);
+            prev = safe;
+        }
+        return result;
+    }
 
     private static PointF[] SimplifyByPixelDistance(IReadOnlyList<PointF> points, float minDistancePx = 2.0f)
     {

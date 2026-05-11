@@ -2,6 +2,8 @@
 
 public sealed record StopPoint(
     DateTime Timestamp,
-    double Latitude,
-    double Longitude,
-    int PhotoIndex);
+    double   Latitude,
+    double   Longitude,
+    int      PhotoIndex,
+    string?  Location,
+    bool     IsFinalSummary = false);

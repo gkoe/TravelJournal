@@ -4,7 +4,7 @@ public sealed record MapRenderingOptions
 {
     public int      TargetWidthPx            { get; init; } = 1600;
     public int      TargetHeightPx           { get; init; } = 1200;
-    public TimeSpan StopThreshold            { get; init; } = TimeSpan.FromMinutes(30);
+    public TimeSpan StopThreshold            { get; init; } = TimeSpan.FromMinutes(90);
     public double   BoundsPaddingFraction    { get; init; } = 0.12;
     public int      MaxParallelTileDownloads { get; init; } = 4;
     public bool     AddFinalSummaryMap       { get; init; } = true;

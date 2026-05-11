@@ -11,6 +11,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
+using System.Windows.Threading;
 using Int32Rect = System.Windows.Int32Rect;
 
 namespace TravelJournal.Wpf.ViewModels;
@@ -28,6 +29,22 @@ public partial class MainViewModel : ObservableObject
     private readonly IMapRendererFactory     _mapRendererFactory;
     private readonly UserSettingsService     _userSettings;
     private readonly ImageCropService        _cropService;
+    private readonly IWebExportService       _webExport;
+    private readonly IHeicConverter          _heicConverter;
+    private readonly IPhotoRenamer           _photoRenamer;
+
+    private readonly DispatcherTimer    _autoSaveTimer;
+    private readonly SemaphoreSlim      _saveLock         = new(1, 1);
+    private readonly List<PhotoViewModel> _subscribedPhotos = new();
+    private DateTime?                   _lastAutoSavedAt;
+
+    private static readonly HashSet<string> CsvRelevantProperties = new(StringComparer.Ordinal)
+    {
+        nameof(PhotoViewModel.State),
+        nameof(PhotoViewModel.Title),
+        nameof(PhotoViewModel.Description),
+        nameof(PhotoViewModel.Location),
+    };
 
     private MapRenderingOptions _baseOptions = new();
 
@@ -70,8 +87,6 @@ public partial class MainViewModel : ObservableObject
             GenerateMapsCommand.NotifyCanExecuteChanged();
             if (value is PhotoViewModel pvm && pvm.LargeImage == null && !pvm.IsMissing)
                 _ = LoadLargeImageAsync(pvm);
-            if (value is MapItemViewModel mvm && mvm.LargeImage == null)
-                _ = LoadMapLargeImageAsync(mvm);
         }
     }
 
@@ -109,9 +124,9 @@ public partial class MainViewModel : ObservableObject
 
     // ── Collections ───────────────────────────────────────────
 
-    public ObservableCollection<PhotoViewModel>   Photos     { get; } = new();
-    public ObservableCollection<MapItemViewModel> Maps       { get; } = new();
-    public ObservableCollection<IGalleryItem>     GalleryItems { get; } = new();
+    public ObservableCollection<PhotoViewModel>    Photos        { get; } = new();
+    public ObservableCollection<HeicItemViewModel> HeicCandidates { get; } = new();
+    public ObservableCollection<IGalleryItem>      GalleryItems  { get; } = new();
     public ICollectionView GalleryItemsView { get; }
 
     public event Action? ScrollSelectedIntoViewRequested;
@@ -127,7 +142,10 @@ public partial class MainViewModel : ObservableObject
         ExifReaderService       exifReader,
         IMapRendererFactory     mapRendererFactory,
         UserSettingsService     userSettings,
-        ImageCropService        cropService)
+        ImageCropService        cropService,
+        IWebExportService       webExport,
+        IHeicConverter          heicConverter,
+        IPhotoRenamer           photoRenamer)
     {
         _folderDialog       = folderDialog;
         _thumbnailLoader    = thumbnailLoader;
@@ -140,6 +158,16 @@ public partial class MainViewModel : ObservableObject
         _mapRendererFactory = mapRendererFactory;
         _userSettings       = userSettings;
         _cropService        = cropService;
+        _webExport          = webExport;
+        _heicConverter      = heicConverter;
+        _photoRenamer       = photoRenamer;
+
+        _autoSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _autoSaveTimer.Tick += async (_, _) =>
+        {
+            _autoSaveTimer.Stop();
+            await DoAutoSaveAsync();
+        };
 
         _baseOptions = _mapRendererFactory.LoadBaseOptions();
 
@@ -156,7 +184,13 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnActiveFilterChanged(PhotoFilter value) => GalleryItemsView.Refresh();
 
-    partial void OnIsBusyChanged(bool value) => GenerateMapsCommand.NotifyCanExecuteChanged();
+    partial void OnIsBusyChanged(bool value)
+    {
+        GenerateMapsCommand.NotifyCanExecuteChanged();
+        ExportWebPresentationCommand.NotifyCanExecuteChanged();
+        ConvertHeicCommand.NotifyCanExecuteChanged();
+        RenamePhotosCommand.NotifyCanExecuteChanged();
+    }
 
     // ── Scan / Folder ──────────────────────────────────────────
 
@@ -167,7 +201,6 @@ public partial class MainViewModel : ObservableObject
         if (folder == null) return;
         CurrentFolder = folder;
         RescanCommand.NotifyCanExecuteChanged();
-        SaveCsvCommand.NotifyCanExecuteChanged();
         ToggleGeocodingCommand.NotifyCanExecuteChanged();
         GenerateMapsCommand.NotifyCanExecuteChanged();
         await ScanInternalAsync(folder);
@@ -180,21 +213,52 @@ public partial class MainViewModel : ObservableObject
         await ScanInternalAsync(CurrentFolder);
     }
 
-    [RelayCommand(CanExecute = nameof(HasFolder))]
-    private async Task SaveCsvAsync()
+    // ── Auto-Save ────────────────────────────────────────────
+
+    public bool HasPendingAutoSave => _autoSaveTimer.IsEnabled;
+
+    public async Task FlushAutoSaveAsync()
     {
-        if (CurrentFolder == null) return;
-        IsBusy = true;
+        _autoSaveTimer.Stop();
+        await DoAutoSaveAsync();
+    }
+
+    private void RequestAutoSave()
+    {
+        if (string.IsNullOrEmpty(CurrentFolder)) return;
+        _autoSaveTimer.Stop();
+        _autoSaveTimer.Start();
+    }
+
+    private void OnPhotoPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != null && CsvRelevantProperties.Contains(e.PropertyName))
+        {
+            RequestAutoSave();
+            if (e.PropertyName == nameof(PhotoViewModel.Location))
+                GenerateMapsCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private async Task DoAutoSaveAsync()
+    {
+        if (string.IsNullOrEmpty(CurrentFolder)) return;
+        if (!await _saveLock.WaitAsync(0)) return;
         try
         {
             var csvPath = System.IO.Path.Combine(CurrentFolder, "tour.csv");
-            var photos  = Photos.Select(vm => vm.Photo).ToList();
-            await Task.Run(() => _csvWriter.Write(csvPath, photos));
-            StatusText = $"Gespeichert: {csvPath}";
+            var entries = AllCsvEntries().ToList();
+            await Task.Run(() => _csvWriter.Write(csvPath, entries));
+            _lastAutoSavedAt       = DateTime.Now;
+            BackgroundActivityText = $"Gespeichert · {_lastAutoSavedAt:HH:mm:ss}";
+        }
+        catch (Exception ex)
+        {
+            BackgroundActivityText = $"Speichern fehlgeschlagen: {ex.Message}";
         }
         finally
         {
-            IsBusy = false;
+            _saveLock.Release();
         }
     }
 
@@ -388,8 +452,7 @@ public partial class MainViewModel : ObservableObject
             BackgroundActivityText = $"Ortsermittlung abgeschlossen ({resolved} von {queue.Count} Fotos).";
 
             var csvPath = System.IO.Path.Combine(CurrentFolder, "tour.csv");
-            var photos  = Photos.Select(vm => vm.Photo).ToList();
-            await Task.Run(() => _csvWriter.Write(csvPath, photos), CancellationToken.None);
+            await Task.Run(() => _csvWriter.Write(csvPath, AllCsvEntries()), CancellationToken.None);
             BackgroundActivityText += " CSV gespeichert.";
         }
         catch (OperationCanceledException)
@@ -430,9 +493,12 @@ public partial class MainViewModel : ObservableObject
         }
 
         if (item is PhotoViewModel photo)
+        {
             Photos.Remove(photo);
-        else if (item is MapItemViewModel map)
-            Maps.Remove(map);
+            // Unsubscribe from property change events
+            photo.PropertyChanged -= OnPhotoPropertyChanged;
+            _subscribedPhotos.Remove(photo);
+        }
 
         GalleryItems.Remove(item);
         GalleryItemsView.Refresh();
@@ -442,11 +508,10 @@ public partial class MainViewModel : ObservableObject
             ? newItems[Math.Min(currentIdx, newItems.Count - 1)]
             : null;
 
-        if (isMissing && CurrentFolder != null)
+        if (CurrentFolder != null && isMissing)
         {
             var csvPath = System.IO.Path.Combine(CurrentFolder, "tour.csv");
-            var photos  = Photos.Select(vm => vm.Photo).ToList();
-            await Task.Run(() => _csvWriter.Write(csvPath, photos));
+            await Task.Run(() => _csvWriter.Write(csvPath, AllCsvEntries()));
         }
 
         UpdateStatusText();
@@ -502,20 +567,15 @@ public partial class MainViewModel : ObservableObject
                 { OverrideDuration = StartSlideDuration });
 
         // ── Hauptteil: ausgewählte Fotos + Karten ─────────────
-        var selectedPhotoTimes = Photos
-            .Where(p => p.State == PhotoState.Selected && p.DateTime.HasValue)
-            .Select(p => p.DateTime!.Value)
-            .OrderBy(t => t)
-            .ToList();
-
         var mainItems = new List<IPresentationItem>();
         mainItems.AddRange(Photos
-            .Where(p => p.State == PhotoState.Selected && p.DateTime.HasValue)
+            .Where(p => p.State == PhotoState.Selected && p.DateTime.HasValue && !p.IsMapPhoto)
             .Select(p => (IPresentationItem)new PhotoPresentationItem(
                 p.DateTime!.Value, p.FullPath, p.Location, p.Title)));
-        mainItems.AddRange(Maps
-            .Select(m => (IPresentationItem)new MapPresentationItem(
-                GetMapSortKey(m.EffectiveDateTime, selectedPhotoTimes), m.FullPath)));
+        mainItems.AddRange(Photos
+            .Where(p => p.IsMapPhoto)
+            .Select(m => (IPresentationItem)new PhotoPresentationItem(
+                m.EffectiveDateTime, m.FullPath, m.Location, m.Title)));
         var sortedMain = mainItems.OrderBy(i => i.EffectiveDateTime);
 
         // ── Schlussfolie(n) ───────────────────────────────────
@@ -537,22 +597,160 @@ public partial class MainViewModel : ObservableObject
 
     private bool CanStartPresentation() =>
         Photos.Any(p => p.State is PhotoState.Selected or PhotoState.Start or PhotoState.End)
-        || Maps.Any();
+        || Photos.Any(p => p.IsMapPhoto);
 
-    private DateTime GetMapSortKey(DateTime mapTime, IReadOnlyList<DateTime> sortedPhotoTimes)
+    // ── Web-Präsentation exportieren ─────────────────────────
+
+    [RelayCommand(CanExecute = nameof(CanExportWebPresentation))]
+    private async Task ExportWebPresentationAsync()
     {
-        var before = sortedPhotoTimes.TakeWhile(t => t < mapTime).ToList();
-        if (before.Count == 0) return mapTime;
+        if (CurrentFolder is null) return;
 
-        int clusterStart = before.Count - 1;
-        while (clusterStart > 0 &&
-               before[clusterStart] - before[clusterStart - 1] < _baseOptions.StopThreshold)
+        var picked = _folderDialog.PickFolder(null);
+        if (picked is null) return;
+
+        IsBusy = true;
+        try
         {
-            clusterStart--;
-        }
+            var progress = new Progress<TravelJournal.WebExporter.WebExportProgress>(p =>
+            {
+                StatusText = p.Stage switch
+                {
+                    "photos"    => $"Fotos optimieren {p.Current}/{p.Total} …",
+                    "maps"      => $"Karten kopieren {p.Current}/{p.Total} …",
+                    "templates" => "Templates schreiben …",
+                    _           => p.Message ?? ""
+                };
+            });
 
-        return before[clusterStart].AddTicks(-1);
+            var count = await _webExport.ExportAsync(CurrentFolder, picked, progress, CancellationToken.None);
+            StatusText = count == 0
+                ? "Keine Inhalte zum Exportieren gefunden."
+                : $"Web-Präsentation erstellt ({count} Items).";
+
+            if (count > 0)
+            {
+                var indexPath = System.IO.Path.Combine(picked, "index.html");
+                System.Diagnostics.Process.Start(
+                    new System.Diagnostics.ProcessStartInfo(indexPath) { UseShellExecute = true });
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Web-Export fehlgeschlagen: {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
+
+    private bool CanExportWebPresentation() =>
+        !IsBusy && !string.IsNullOrEmpty(CurrentFolder)
+        && (Photos.Any(p => p.State == PhotoState.Selected) || Photos.Any(p => p.IsMapPhoto));
+
+    // ── HEIC konvertieren ────────────────────────────────────
+
+    [RelayCommand(CanExecute = nameof(CanConvertHeic))]
+    private async Task ConvertHeicAsync()
+    {
+        if (CurrentFolder is null || HeicCandidates.Count == 0) return;
+
+        var total = HeicCandidates.Count;
+
+        var confirm = System.Windows.MessageBox.Show(
+            $"Es werden {total} HEIC-Datei(en) nach JPEG konvertiert.\nDie HEIC-Originale werden anschließend gelöscht.\nFortfahren?",
+            "HEIC importieren",
+            System.Windows.MessageBoxButton.YesNo,
+            System.Windows.MessageBoxImage.Question);
+        if (confirm != System.Windows.MessageBoxResult.Yes) return;
+
+        var options   = new HeicConversionOptions { JpegQuality = 90 };
+        var converted = 0;
+
+        IsBusy = true;
+        try
+        {
+            foreach (var item in HeicCandidates.ToList())
+            {
+                BackgroundActivityText =
+                    $"Konvertiere {item.Filename} ({converted + 1}/{total}) …";
+                try
+                {
+                    await _heicConverter.ConvertAsync(item.FullPath, options);
+                    converted++;
+                }
+                catch (Exception ex)
+                {
+                    BackgroundActivityText = $"Fehler bei {item.Filename}: {ex.Message}";
+                }
+            }
+
+            BackgroundActivityText = $"{converted} HEIC-Datei(en) konvertiert.";
+
+            await ScanInternalAsync(CurrentFolder);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private bool CanConvertHeic() => !IsBusy && HeicCandidates.Count > 0;
+
+    // ── Fotos umbenennen ─────────────────────────────────────
+
+    [RelayCommand(CanExecute = nameof(CanRenamePhotos))]
+    private async Task RenamePhotosAsync()
+    {
+        if (CurrentFolder is null) return;
+
+        var renameableCount = Photos.Count(p =>
+            p.DateTime is not null
+            && !TravelJournal.Core.Services.PhotoRenamer.AlreadyMatchingPattern.IsMatch(p.Filename));
+
+        var msg = $"Es werden bis zu {renameableCount} Fotos im Ordner umbenannt.\n\n" +
+                  $"• Schema: YYYY_MM_DD_hh_mm_Ort.jpg\n" +
+                  $"• tour.csv wird automatisch angepasst (Backup wird angelegt)\n" +
+                  $"• Karten bleiben unangetastet\n\n" +
+                  $"Fortfahren?";
+
+        var renameConfirm = System.Windows.MessageBox.Show(
+            msg,
+            "Fotos umbenennen",
+            System.Windows.MessageBoxButton.YesNo,
+            System.Windows.MessageBoxImage.Question);
+        if (renameConfirm != System.Windows.MessageBoxResult.Yes) return;
+
+        IsBusy = true;
+        var progress = new Progress<TravelJournal.Core.Services.RenameProgress>(p =>
+        {
+            BackgroundActivityText = $"Umbenennen {p.Current}/{p.Total}: {p.Message}";
+        });
+
+        try
+        {
+            var allEntries = Photos.Select(vm => vm.Photo).ToList();
+
+            var result = await _photoRenamer.RenameAsync(CurrentFolder, allEntries, progress);
+
+            BackgroundActivityText =
+                $"{result.Renamed.Count} umbenannt, " +
+                $"{result.SkippedAlreadyMatching.Count} bereits korrekt, " +
+                $"{result.SkippedNoDateTime.Count} ohne Datum übersprungen" +
+                (result.Errors.Count > 0 ? $", {result.Errors.Count} Fehler" : "") + ".";
+
+            await ScanInternalAsync(CurrentFolder);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private bool CanRenamePhotos() =>
+        !IsBusy && !string.IsNullOrEmpty(CurrentFolder)
+        && Photos.Any(p => p.DateTime is not null);
 
     // ── Karten generieren ─────────────────────────────────────
 
@@ -567,17 +765,35 @@ public partial class MainViewModel : ObservableObject
 
         if (CurrentFolder == null) return;
 
-        // Pass ALL GPS photos — renderer uses State to determine stops
+        // Bestätigung wenn bereits Karten vorhanden
+        var existingMapCount = Photos.Count(p => p.IsMapPhoto);
+        if (existingMapCount > 0)
+        {
+            var mapConfirm = System.Windows.MessageBox.Show(
+                $"Es werden {existingMapCount} bestehende Karte(n) gelöscht und durch frisch generierte ersetzt. Fortfahren?",
+                "Karten neu erzeugen",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Question);
+            if (mapConfirm != System.Windows.MessageBoxResult.Yes) return;
+        }
+
+        _mapRenderCts = new CancellationTokenSource();
+        var ct        = _mapRenderCts.Token;
+
+        // Bestehende Karten bereinigen
+        var deleted = await CleanupExistingMapsAsync(ct);
+        if (deleted > 0)
+            BackgroundActivityText = $"{deleted} alte Karte(n) entfernt — Generierung läuft …";
+
+        // Pass only real GPS photos (exclude existing map PNGs)
         var allWithGps = Photos
             .Select(vm => vm.Photo)
-            .Where(p => p.Latitude.HasValue && p.Longitude.HasValue && p.DateTime.HasValue)
+            .Where(p => p.EntryType != EntryType.Map
+                     && p.Latitude.HasValue && p.Longitude.HasValue && p.DateTime.HasValue)
             .OrderBy(p => p.DateTime)
             .ToList();
 
         if (allWithGps.Count < 2) return;
-
-        _mapRenderCts = new CancellationTokenSource();
-        var ct        = _mapRenderCts.Token;
 
         var options = _baseOptions with
         {
@@ -601,14 +817,13 @@ public partial class MainViewModel : ObservableObject
             };
         });
 
-        bool rescan = false;
+        MapRenderResult? mapResult = null;
         try
         {
-            var count = await renderer.RenderAllAsync(allWithGps, outputFolder, progressReporter, ct);
-            StatusText = count == 0
+            mapResult  = await renderer.RenderAllAsync(allWithGps, outputFolder, progressReporter, ct);
+            StatusText = mapResult.RenderedCount == 0
                 ? "Keine Stopps erkannt — keine Karten erzeugt."
-                : $"{count} Karten erzeugt.";
-            rescan = count > 0;
+                : $"{mapResult.RenderedCount} Karten erzeugt.";
         }
         catch (OperationCanceledException)
         {
@@ -622,14 +837,78 @@ public partial class MainViewModel : ObservableObject
             GenerateMapsCommand.NotifyCanExecuteChanged();
         }
 
-        if (rescan && CurrentFolder != null)
+        if (mapResult?.RenderedCount > 0 && CurrentFolder != null)
+        {
+            // Write map photos (with GPS + Location from stops) to CSV before re-scan,
+            // so the scanner picks up the correct data immediately.
+            var csvPath           = System.IO.Path.Combine(CurrentFolder, "tour.csv");
+            var byFilename        = Photos.Select(vm => vm.Photo)
+                .ToDictionary(p => p.Filename, StringComparer.OrdinalIgnoreCase);
+            foreach (var mapPhoto in mapResult.MapPhotos)
+            {
+                if (byFilename.TryGetValue(mapPhoto.Filename, out var existing))
+                {
+                    existing.DateTime  = mapPhoto.DateTime;
+                    existing.Latitude  = mapPhoto.Latitude;
+                    existing.Longitude = mapPhoto.Longitude;
+                    existing.Location  = mapPhoto.Location;
+                    // State/Title/Description are intentionally preserved
+                }
+                else
+                {
+                    byFilename[mapPhoto.Filename] = mapPhoto;
+                }
+            }
+            await Task.Run(() => _csvWriter.Write(csvPath, byFilename.Values.ToList()));
             await ScanInternalAsync(CurrentFolder);
+        }
     }
 
     private bool CanGenerateMaps() =>
         !IsBusy
         && !string.IsNullOrEmpty(CurrentFolder)
-        && Photos.Count(p => p.State == PhotoState.Selected) >= 2;
+        && Photos.Any(p =>
+            p.State == PhotoState.Selected
+            && p.Latitude is not null
+            && p.Longitude is not null
+            && !string.IsNullOrEmpty(p.Location));
+
+    private async Task<int> CleanupExistingMapsAsync(CancellationToken ct)
+    {
+        if (CurrentFolder is null) return 0;
+
+        var mapPhotos = Photos.Where(p => p.IsMapPhoto).ToList();
+        if (mapPhotos.Count == 0) return 0;
+
+        foreach (var p in mapPhotos)
+        {
+            Photos.Remove(p);
+            p.PropertyChanged -= OnPhotoPropertyChanged;
+            _subscribedPhotos.Remove(p);
+        }
+
+        var deleted = 0;
+        foreach (var p in mapPhotos)
+        {
+            try
+            {
+                var path = System.IO.Path.Combine(CurrentFolder, p.Filename);
+                if (System.IO.File.Exists(path))
+                {
+                    System.IO.File.Delete(path);
+                    deleted++;
+                }
+            }
+            catch (Exception ex)
+            {
+                BackgroundActivityText = $"Fehler beim Löschen einer Karte: {ex.Message}";
+            }
+            ct.ThrowIfCancellationRequested();
+        }
+
+        RebuildGalleryItems();
+        return deleted;
+    }
 
     // ── Filter ────────────────────────────────────────────────
 
@@ -663,8 +942,17 @@ public partial class MainViewModel : ObservableObject
     private void SaveUserSettings() =>
         _userSettings.Save(new UserSettings(SelectedMapStyleId, SelectedLanguage, BoundsPaddingPercent));
 
+    private IEnumerable<Photo> AllCsvEntries() =>
+        Photos.Select(vm => vm.Photo);
+
     private bool HasFolder()        => CurrentFolder != null;
-    private bool HasSelectedPhoto() => SelectedPhoto != null;
+    private bool HasSelectedPhoto() => SelectedPhoto != null && !SelectedPhoto.IsMapPhoto;
+
+    private static readonly System.Text.RegularExpressions.Regex _mapFilenameRegex =
+        new(@"^map_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(_[A-Za-z0-9]+)?\.png$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    private static bool IsMapFilename(string name) => _mapFilenameRegex.IsMatch(name);
 
     private static int NormalizeAngle(int deg) => ((deg % 360) + 360) % 360;
 
@@ -688,6 +976,8 @@ public partial class MainViewModel : ObservableObject
             MergeCollections(result, folder);
 
             var missingPhotos = Photos.Where(p => p.IsMissing).ToList();
+            bool needsCsvWrite = missingPhotos.Count > 0 || result.NewFilenames.Any(n => IsMapFilename(n));
+
             if (missingPhotos.Count > 0)
             {
                 foreach (var missing in missingPhotos)
@@ -699,10 +989,12 @@ public partial class MainViewModel : ObservableObject
 
                 if (SelectedGalleryItem != null && !GalleryItems.Contains(SelectedGalleryItem))
                     SelectedGalleryItem = GalleryItems.OfType<PhotoViewModel>().FirstOrDefault();
+            }
 
+            if (needsCsvWrite)
+            {
                 var csvPath = System.IO.Path.Combine(folder, "tour.csv");
-                var photos  = Photos.Select(vm => vm.Photo).ToList();
-                await Task.Run(() => _csvWriter.Write(csvPath, photos));
+                await Task.Run(() => _csvWriter.Write(csvPath, AllCsvEntries()));
             }
 
             UpdateStatusText();
@@ -746,10 +1038,22 @@ public partial class MainViewModel : ObservableObject
             }
         }
 
-        // ── Maps ──
-        Maps.Clear();
-        foreach (var mapItem in result.Maps)
-            Maps.Add(new MapItemViewModel(mapItem));
+        // ── PropertyChanged-Subscriptions ──
+        foreach (var old in _subscribedPhotos)
+            old.PropertyChanged -= OnPhotoPropertyChanged;
+        _subscribedPhotos.Clear();
+        foreach (var vm in Photos)
+        {
+            vm.PropertyChanged += OnPhotoPropertyChanged;
+            _subscribedPhotos.Add(vm);
+        }
+
+
+        // ── HEIC ──
+        HeicCandidates.Clear();
+        foreach (var heic in result.HeicCandidates)
+            HeicCandidates.Add(new HeicItemViewModel(heic));
+        ConvertHeicCommand.NotifyCanExecuteChanged();
 
         // ── Combined gallery ──
         RebuildGalleryItems();
@@ -761,17 +1065,15 @@ public partial class MainViewModel : ObservableObject
     private void RebuildGalleryItems()
     {
         GalleryItems.Clear();
-        foreach (var p in Photos) GalleryItems.Add(p);
-        foreach (var m in Maps)   GalleryItems.Add(m);
+        foreach (var p in Photos)         GalleryItems.Add(p);
+        foreach (var h in HeicCandidates) GalleryItems.Add(h);
         GalleryItemsView.Refresh();
     }
 
     private async Task LoadThumbnailsAsync()
     {
         var photos = Photos.Where(vm => vm.Thumbnail == null && !vm.IsMissing).ToList();
-        var maps   = Maps.Where(vm => vm.Thumbnail == null).ToList();
         foreach (var vm in photos) vm.Thumbnail = await _thumbnailLoader.LoadAsync(vm.FullPath);
-        foreach (var vm in maps)   await vm.LoadThumbnailAsync(_thumbnailLoader);
     }
 
     private async Task LoadLargeImageAsync(PhotoViewModel vm)
@@ -779,9 +1081,6 @@ public partial class MainViewModel : ObservableObject
         var img = await _thumbnailLoader.LoadAsync(vm.FullPath, decodePixelWidth: 1600);
         vm.LargeImage = img;
     }
-
-    private async Task LoadMapLargeImageAsync(MapItemViewModel vm)
-        => await vm.LoadLargeImageAsync(_thumbnailLoader);
 
     private void UpdateStatusText()
     {

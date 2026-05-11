@@ -2,6 +2,7 @@
 using MetadataExtractor;
 using MetadataExtractor.Formats.Exif;
 using MetadataExtractor.Formats.Jpeg;
+using MetadataExtractor.Formats.Png;
 
 namespace TravelJournal.Core.Services;
 
@@ -77,6 +78,19 @@ public class ExifReaderService
                 photo.PixelWidth = w;
             if (jpeg.TryGetInt32(JpegDirectory.TagImageHeight, out var h))
                 photo.PixelHeight = h;
+            if (photo.PixelWidth.HasValue && photo.PixelHeight.HasValue)
+                return;
+        }
+
+        // PNG-Header (kein EXIF vorhanden)
+        var png = directories.OfType<PngDirectory>()
+            .FirstOrDefault(d => d.Name == "PNG-IHDR");
+        if (png != null)
+        {
+            if (png.TryGetInt32(PngDirectory.TagImageWidth, out var pw))
+                photo.PixelWidth = pw;
+            if (png.TryGetInt32(PngDirectory.TagImageHeight, out var ph))
+                photo.PixelHeight = ph;
             if (photo.PixelWidth.HasValue && photo.PixelHeight.HasValue)
                 return;
         }

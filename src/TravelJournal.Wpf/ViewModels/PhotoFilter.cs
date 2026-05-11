@@ -1,3 +1,3 @@
 ﻿namespace TravelJournal.Wpf.ViewModels;
 
-public enum PhotoFilter { All, Open, Selected, Deselected, New, Maps }
+public enum PhotoFilter { All, Open, Selected, Deselected, New, Maps, Heic }

@@ -33,10 +33,20 @@ public partial class MainWindow : Window
             lb.ScrollIntoView(lb.SelectedItem);
     }
 
-    protected override void OnClosing(CancelEventArgs e)
+    protected override async void OnClosing(CancelEventArgs e)
     {
-        if (DataContext is MainViewModel vm)
-            e.Cancel = !vm.HandleWindowClosing();
+        if (DataContext is not MainViewModel vm) { base.OnClosing(e); return; }
+
+        if (vm.HasPendingAutoSave)
+        {
+            e.Cancel = true;
+            base.OnClosing(e);
+            await vm.FlushAutoSaveAsync();
+            Close();
+            return;
+        }
+
+        e.Cancel = !vm.HandleWindowClosing();
         base.OnClosing(e);
     }
 }

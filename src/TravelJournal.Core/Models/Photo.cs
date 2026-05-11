@@ -11,7 +11,8 @@ public class Photo
     public string? Title { get; set; }
     public string? Description { get; set; }
     public string? Location { get; set; }
-    public long?   FileSizeBytes { get; set; }
-    public int?    PixelWidth    { get; set; }
-    public int?    PixelHeight   { get; set; }
+    public long?     FileSizeBytes { get; set; }
+    public int?      PixelWidth    { get; set; }
+    public int?      PixelHeight   { get; set; }
+    public EntryType EntryType     { get; set; } = EntryType.Photo;
 }

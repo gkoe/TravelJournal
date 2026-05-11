@@ -149,8 +149,36 @@ public class PhotoFolderScannerTests : IDisposable
         secondResult.Photos.Should().HaveCount(2);
     }
 
+    [Fact]
+    public void Scan_HeicAndHeifFiles_PopulatesHeicCandidates()
+    {
+        CreateJpeg("photo.jpg");
+        CreateHeic("image.heic");
+        CreateHeic("image.heif");
+
+        var result = CreateScanner().Scan(_tempFolder);
+
+        result.Photos.Should().HaveCount(1);
+        result.HeicCandidates.Should().HaveCount(2);
+        result.HeicCandidates.Should().Contain(h => h.Filename == "image.heic");
+        result.HeicCandidates.Should().Contain(h => h.Filename == "image.heif");
+    }
+
+    [Fact]
+    public void Scan_NoHeicFiles_EmptyHeicCandidates()
+    {
+        CreateJpeg("photo.jpg");
+
+        var result = CreateScanner().Scan(_tempFolder);
+
+        result.HeicCandidates.Should().BeEmpty();
+    }
+
     private void CreateJpeg(string filename)
         => File.WriteAllBytes(Path.Combine(_tempFolder, filename), [0xFF, 0xD8, 0xFF, 0xD9]);
+
+    private void CreateHeic(string filename)
+        => File.WriteAllBytes(Path.Combine(_tempFolder, filename), [0x00, 0x00, 0x00, 0x18]);
 
     public void Dispose()
     {

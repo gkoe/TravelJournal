@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Routenkarten aus GPS-Fotos — Algorithmen &amp; Implementierung</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --accent:   #1E5F8E;
+  --accent2:  #4285F4;
+  --red:      #EA4335;
+  --green:    #2E7D32;
+  --bg:       #f0f4f8;
+  --panel:    #ffffff;
+  --text:     #1a2535;
+  --muted:    #556070;
+  --code-bg:  #1e2a3a;
+  --code-fg:  #d4e4f4;
+  --kw:       #79c0ff;
+  --str:      #a5d6a7;
+  --cmt:      #6a8a6a;
+  --num:      #ffa94d;
+  --fn:       #ffe082;
+}
+
+html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); }
+
+/* ─── Presentation shell ─────────────────────────────────────────── */
+.deck      { position: relative; width: 100vw; height: 100vh; }
+.slide     { position: absolute; inset: 0; display: flex; flex-direction: column;
+             padding: 40px 60px 28px; opacity: 0; pointer-events: none;
+             transition: opacity .35s, transform .35s; transform: translateX(60px); }
+.slide.active { opacity: 1; pointer-events: all; transform: translateX(0); }
+.slide.prev   { opacity: 0; transform: translateX(-60px); }
+
+/* ─── Navigation bar ─────────────────────────────────────────────── */
+.nav { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+       display: flex; align-items: center; gap: 18px; z-index: 100;
+       background: rgba(30,42,60,.85); backdrop-filter: blur(6px);
+       border-radius: 40px; padding: 8px 20px; }
+.nav button { background: none; border: none; color: #c8dcf0; font-size: 20px;
+              cursor: pointer; padding: 4px 10px; border-radius: 20px;
+              transition: background .2s; }
+.nav button:hover { background: rgba(255,255,255,.15); }
+.nav button:disabled { opacity: .3; cursor: default; }
+.nav #counter { color: #c8dcf0; font-size: 13px; min-width: 60px; text-align: center; }
+.nav .hint { color: #607080; font-size: 11px; }
+
+/* ─── Slide header ───────────────────────────────────────────────── */
+.slide-header { display: flex; align-items: baseline; gap: 14px; margin-bottom: 28px; }
+.slide-num    { font-size: 13px; font-weight: 700; color: var(--accent);
+                background: #ddeeff; border-radius: 20px; padding: 3px 12px; letter-spacing: .5px; }
+h1 { font-size: 36px; font-weight: 700; color: var(--accent); }
+h2 { font-size: 28px; font-weight: 700; color: var(--accent); }
+h3 { font-size: 16px; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+
+/* ─── Layout helpers ─────────────────────────────────────────────── */
+.cols   { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; flex: 1; min-height: 0; }
+.cols3  { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; flex: 1; min-height: 0; }
+.col    { display: flex; flex-direction: column; gap: 14px; }
+.full   { flex: 1; min-height: 0; }
+.center { display: flex; align-items: center; justify-content: center; flex: 1; }
+
+/* ─── Cards ──────────────────────────────────────────────────────── */
+.card { background: var(--panel); border-radius: 12px; padding: 18px 22px;
+        box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+.card.accent { border-left: 4px solid var(--accent); }
+.card.red    { border-left: 4px solid var(--red); }
+.card.green  { border-left: 4px solid var(--green); }
+.card.blue   { border-left: 4px solid var(--accent2); }
+
+p  { line-height: 1.6; font-size: 15px; color: var(--muted); }
+ul { padding-left: 18px; }
+li { line-height: 1.7; font-size: 15px; color: var(--muted); }
+li strong { color: var(--text); }
+.big  { font-size: 17px !important; }
+.lg   { font-size: 18px !important; }
+.mono { font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 13px; }
+
+/* ─── Code blocks ────────────────────────────────────────────────── */
+pre  { background: var(--code-bg); border-radius: 10px; padding: 16px 20px;
+       overflow: auto; font-size: 13.5px; line-height: 1.65; color: var(--code-fg);
+       font-family: 'Cascadia Code', Consolas, monospace; }
+.kw  { color: var(--kw); font-weight: 600; }
+.str { color: var(--str); }
+.cmt { color: var(--cmt); font-style: italic; }
+.num { color: var(--num); }
+.fn  { color: var(--fn); }
+.op  { color: #88bbdd; }
+.ty  { color: #80cbc4; }
+
+/* ─── Badges / tags ──────────────────────────────────────────────── */
+.badge { display: inline-block; border-radius: 6px; padding: 3px 10px;
+         font-size: 12px; font-weight: 700; letter-spacing: .4px; }
+.badge.blue   { background: #ddeeff; color: var(--accent); }
+.badge.red    { background: #fde8e8; color: var(--red); }
+.badge.green  { background: #e8f5e9; color: var(--green); }
+.badge.gray   { background: #e8edf2; color: #445566; }
+
+/* ─── Flow chart ─────────────────────────────────────────────────── */
+.flow { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
+.fbox { background: var(--panel); border: 2px solid var(--accent); border-radius: 10px;
+        padding: 10px 16px; font-size: 14px; font-weight: 600; color: var(--accent);
+        white-space: nowrap; }
+.farrow { font-size: 22px; color: #99aabb; padding: 0 6px; }
+
+/* ─── Title slide ────────────────────────────────────────────────── */
+#s1 { background: linear-gradient(135deg, #1a3a5c 0%, #1E5F8E 60%, #2d80b8 100%); }
+#s1 h1 { color: #fff; font-size: 44px; line-height: 1.2; }
+#s1 p  { color: rgba(255,255,255,.75); font-size: 19px; }
+#s1 .tag { color: rgba(255,255,255,.55); font-size: 14px; margin-top: 30px; }
+#s1 .center { flex-direction: column; gap: 20px; align-items: flex-start; }
+
+/* ─── Highlight box ──────────────────────────────────────────────── */
+.hl { background: #ddeeff; border-radius: 8px; padding: 12px 18px;
+      font-size: 15px; color: var(--accent); font-weight: 600; }
+
+/* ─── Dot legend ─────────────────────────────────────────────────── */
+.dot { display: inline-block; width: 16px; height: 16px; border-radius: 50%;
+       vertical-align: middle; margin-right: 6px; }
+
+/* ─── Table ──────────────────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { background: var(--accent); color: #fff; padding: 9px 14px; text-align: left; }
+td { padding: 8px 14px; border-bottom: 1px solid #e0e8f0; color: var(--muted); }
+tr:last-child td { border-bottom: none; }
+tr:nth-child(even) td { background: #f6faff; }
+td strong { color: var(--text); }
+
+/* progress bar */
+.progress { position: fixed; top: 0; left: 0; height: 3px; background: var(--accent2);
+            transition: width .35s; z-index: 200; }
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+
+<div class="deck" id="deck">
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 1 — Titel
+     ══════════════════════════════════════════════════════════════ -->
+<section class="slide active" id="s1">
+  <div class="center" style="flex-direction:column; align-items:flex-start; gap:22px; padding-top:30px;">
+    <div>
+      <span class="badge blue" style="font-size:14px; margin-bottom:14px; display:inline-block;">Implementierungsüberblick</span>
+      <h1>Routenkarten<br>aus GPS-Fotos</h1>
+    </div>
+    <p>Wie entsteht automatisch eine Karte, die die<br>zurückgelegte Route einer Radreise zeigt?</p>
+    <div style="display:flex; gap:30px; margin-top:10px;">
+      <div style="color:rgba(255,255,255,.7); font-size:15px;">
+        <div style="margin-bottom:6px;">📐 <strong style="color:#fff;">Algorithmen</strong> — Projektion, Stopp-Erkennung</div>
+        <div style="margin-bottom:6px;">📚 <strong style="color:#fff;">Bibliotheken</strong> — ImageSharp, HTTP, Tile-Cache</div>
+        <div>🎨 <strong style="color:#fff;">Visualisierung</strong> — Polyline, Marker, Mosaik</div>
+      </div>
+    </div>
+    <p class="tag" style="color:rgba(255,255,255,.45); font-size:13px; margin-top:14px;">
+      ← → oder Pfeiltasten zum Navigieren
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 2 — Ziel und Ergebnis
+     ══════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s2">
+  <div class="slide-header">
+    <span class="slide-num">ZIEL</span>
+    <h2>Was erzeugt das System?</h2>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <div class="card accent">
+        <h3>Eingabe</h3>
+        <ul>
+          <li><strong>Fotos</strong> mit GPS-Tags (EXIF: Lat/Lon/Zeit)</li>
+          <li>Nutzer markiert <strong>ausgewählte Fotos</strong> als Stopps</li>
+          <li>Konfiguration: Zoom, Bildgröße, Stopp-Schwelle</li>
+        </ul>
+      </div>
+      <div class="card green">
+        <h3>Ausgabe</h3>
+        <ul>
+          <li>Pro Stopp eine <strong>1600 × 1200 px PNG-Karte</strong></li>
+          <li>Zeigt die Route bis zum jeweiligen Stopp</li>
+          <li>Dateiname = Stopp-Zeitstempel (z. B. <code>map_2026-07-12T14-30-00.png</code>)</li>
+        </ul>
+      </div>
+      <div class="card blue">
+        <h3>Zwei getrennte Konzepte</h3>
+        <table>
+          <tr><th>Verwendung</th><th>Datenquelle</th></tr>
+          <tr><td>Bounding-Box, Polyline</td><td><strong>Alle</strong> GPS-Fotos</td></tr>
+          <tr><td>Stopp-Erkennung, Marker</td><td>Nur <strong>ausgewählte</strong> Fotos</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="col">
+      <!-- Visualisierung: Beispiel-Karte als SVG-Skizze -->
+      <div class="card" style="flex:1; display:flex; flex-direction:column;">
+        <h3>Beispiel: Karte für Stopp 2</h3>
+        <div style="flex:1; position:relative;">
+          <svg viewBox="0 0 400 280" style="width:100%; height:100%;" xmlns="http://www.w3.org/2000/svg">
+            <!-- Karten-Hintergrund -->
+            <rect width="400" height="280" rx="8" fill="#d6e8c8"/>
+            <rect x="0" y="0" width="200" height="140" rx="0" fill="#c8dcc0"/>
+            <rect x="200" y="140" width="200" height="140" rx="0" fill="#d0e4c0"/>
+            <!-- Straßen -->
+            <line x1="60" y1="0" x2="80" y2="280" stroke="#b8cca8" stroke-width="8"/>
+            <line x1="0" y1="100" x2="400" y2="120" stroke="#b8cca8" stroke-width="6"/>
+            <line x1="180" y1="0" x2="220" y2="280" stroke="#c0d0a8" stroke-width="5"/>
+            <line x1="0" y1="200" x2="400" y2="180" stroke="#c0d0a8" stroke-width="4"/>
+            <!-- Route (weiße Kontur + blaue Linie) -->
+            <polyline points="30,250 70,200 110,170 140,140 175,105 210,80 250,65 300,70 340,90"
+                      fill="none" stroke="white" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+            <polyline points="30,250 70,200 110,170 140,140 175,105 210,80 250,65 300,70 340,90"
+                      fill="none" stroke="#4285F4" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- Vergangener Stopp (blau) -->
+            <circle cx="140" cy="140" r="7" fill="#4285F4" stroke="white" stroke-width="2"/>
+            <!-- Aktueller Stopp (rot, größer) -->
+            <circle cx="340" cy="90" r="3" fill="#333" opacity=".2" transform="translate(2,4)"/>
+            <circle cx="340" cy="90" r="12" fill="#EA4335" stroke="white" stroke-width="3"/>
+            <!-- Attribution -->
+            <rect x="250" y="258" width="142" height="18" rx="3" fill="rgba(255,255,255,.8)"/>
+            <text x="256" y="271" font-size="9" fill="#555" font-family="sans-serif">© OpenStreetMap contributors</text>
+            <!-- Legende -->
+            <circle cx="18" cy="18" r="5" fill="#4285F4" stroke="white" stroke-width="1.5"/>
+            <text x="27" y="22" font-size="10" fill="#1a2535" font-family="sans-serif">Vergangener Stopp</text>
+            <circle cx="18" cy="36" r="7" fill="#EA4335" stroke="white" stroke-width="2"/>
+            <text x="28" y="40" font-size="10" fill="#1a2535" font-family="sans-serif">Aktueller Stopp</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 3 — Datenfluss
+     ══════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s3">
+  <div class="slide-header">
+    <span class="slide-num">ARCHITEKTUR</span>
+    <h2>Datenfluss: vom Foto zur Karte</h2>
+  </div>
+  <div class="full" style="display:flex; flex-direction:column; gap:22px; justify-content:center;">
+
+    <div class="flow" style="gap:0; justify-content:center;">
+      <div class="fbox" style="background:#e8f0f8;">📷 GPS-Fotos<br><small style="color:#667;font-weight:400">Lat, Lon, Zeit</small></div>
+      <div class="farrow">→</div>
+      <div class="fbox">📐 Projektion<br><small style="color:#667;font-weight:400">Web Mercator</small></div>
+      <div class="farrow">→</div>
+      <div class="fbox">🔍 Zoom &amp;<br>Bounding-Box</div>
+      <div class="farrow">→</div>
+      <div class="fbox">🌐 Tile-Download<br><small style="color:#667;font-weight:400">parallel, gecacht</small></div>
+    </div>
+
+    <div style="text-align:center; color:#99aabc; font-size:24px;">↓</div>
+
+    <div class="flow" style="gap:0; justify-content:center;">
+      <div class="fbox">🧩 Mosaik<br><small style="color:#667;font-weight:400">Tiles zusammensetzen</small></div>
+      <div class="farrow">→</div>
+      <div class="fbox">✂️ Crop<br><small style="color:#667;font-weight:400">1600×1200 px</small></div>
+      <div class="farrow">→</div>
+      <div class="fbox" style="background:#e8f5e9;">🛑 Stopp-Erkennung<br><small style="color:#667;font-weight:400">Zeitlücken</small></div>
+      <div class="farrow">→</div>
+      <div class="fbox" style="background:#fde8e8;">🎨 Zeichnen<br><small style="color:#667;font-weight:400">Polyline + Marker</small></div>
+      <div class="farrow">→</div>
+      <div class="fbox" style="background:#e8f0f8;">💾 PNG-Datei</div>
+    </div>
+
+    <div class="cols3" style="margin-top:8px;">
+      <div class="card green">
+        <h3>Einmalig pro Karten-Set</h3>
+        <p>Projektion, Zoom-Berechnung, Tile-Download und Mosaik-Komposition werden einmal berechnet. Alle Stopp-Karten teilen dieselbe Basiskarte.</p>
+      </div>
+      <div class="card red">
+        <h3>Pro Stopp individuell</h3>
+        <p>Jede Karte klont die Basiskarte und zeichnet dann die Route bis zum jeweiligen Stopp sowie die Marker neu.</p>
+      </div>
+      <div class="card blue">
+        <h3>Klasse: TileMapRenderer</h3>
+        <p>Implementiert <code>IMapRenderer</code>. Kapselt alle Schritte. Nutzt <code>ITileSource</code> und <code>ITileCache</code> als injizierte Abhängigkeiten.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 4 — Web Mercator Projektion
+     ══════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s4">
+  <div class="slide-header">
+    <span class="slide-num">ALGORITHMUS 1</span>
+    <h2>Web-Mercator-Projektion</h2>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <div class="card accent">
+        <h3>Problem</h3>
+        <p class="big">Die Erde ist eine Kugel. Karten sind flach.<br>Wie rechnen wir GPS-Koordinaten in Bildpixel um?</p>
+      </div>
+      <div class="card">
+        <h3>Schritt 1 — Längengrad → X</h3>
+        <p>Longitude geht von −180° bis +180°.<br>Einfache lineare Abbildung:</p>
+        <div class="hl" style="margin-top:8px; font-family:monospace;">
+          x = (lon + 180) / 360 × Gesamtbreite
+        </div>
+      </div>
+      <div class="card">
+        <h3>Schritt 2 — Breitengrad → Y (nicht linear!)</h3>
+        <p>Latitude braucht die <strong>Mercator-Formel</strong> (logarithmisch), damit Landmassen proportional bleiben:</p>
+        <div class="hl" style="margin-top:8px; font-family:monospace; font-size:12.5px;">
+          latRad = lat × π / 180<br>
+          y = (1 − ln(tan(latRad) + 1/cos(latRad)) / π) / 2 × Gesamthöhe
+        </div>
+      </div>
+      <div class="card blue">
+        <h3>Zoom-Level</h3>
+        <p>Gesamtbreite/-höhe = 2<sup>zoom</sup> × 256 Pixel.<br>Bei Zoom 10: 256 × 1024 = <strong>262 144 px</strong> breite Weltkarte.</p>
+      </div>
+    </div>
+    <div class="col">
+      <pre><span class="kw">public static</span> (<span class="ty">double</span> X, <span class="ty">double</span> Y) <span class="fn">LatLonToGlobalPixel</span>(
+    <span class="ty">double</span> lat, <span class="ty">double</span> lon, <span class="ty">int</span> zoom)
+{
+    <span class="ty">double</span> scale  = Math.<span class="fn">Pow</span>(<span class="num">2</span>, zoom) * TileSize;
+
+    <span class="cmt">// Longitude → X (linear)</span>
+    <span class="ty">double</span> x = (lon + <span class="num">180.0</span>) / <span class="num">360.0</span> * scale;
+
+    <span class="cmt">// Latitude → Y (Mercator-Formel)</span>
+    <span class="ty">double</span> latRad = lat * Math.PI / <span class="num">180.0</span>;
+    <span class="ty">double</span> y = (<span class="num">1.0</span> -
+        Math.<span class="fn">Log</span>(Math.<span class="fn">Tan</span>(latRad) +
+               <span class="num">1.0</span> / Math.<span class="fn">Cos</span>(latRad)) / Math.PI
+    ) / <span class="num">2.0</span> * scale;
+
+    <span class="kw">return</span> (x, y);
+}
+
+<span class="cmt">// Globale Pixel → Tile-Index (ganzzahlig)</span>
+<span class="kw">public static</span> (<span class="ty">int</span>, <span class="ty">int</span>) <span class="fn">GlobalPixelToTile</span>(<span class="ty">double</span> x, <span class="ty">double</span> y)
+    => ((<span class="ty">int</span>)(x / TileSize), (<span class="ty">int</span>)(y / TileSize));</pre>
+      <div class="card" style="margin-top:0;">
+        <h3>Warum Mercator?</h3>
+        <p>Winkeltreu: Straßenverläufe und Formen wirken lokal korrekt. Skalierungsfehler nimmt zu den Polen zu — für Mitteleuropa gut geeignet.</p>
+      </div>
+      <div class="card" style="background:#f0f7ff;">
+        <h3>TileSize = 256</h3>
+        <p>Standard weltweit: OpenStreetMap, Google Maps, MapTiler — alle verwenden 256×256 px Kacheln.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 5 — Tile-System
+     ══════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s5">
+  <div class="slide-header">
+    <span class="slide-num">ALGORITHMUS 2</span>
+    <h2>Tile-System — Kacheln &amp; Zoom</h2>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <div class="card accent">
+        <h3>Was ist ein Tile?</h3>
+        <p class="big">Eine <strong>256 × 256 Pixel PNG-Kachel</strong>, eindeutig adressiert durch drei Zahlen: <strong>Zoom / X / Y</strong></p>
+      </div>
+
+      <!-- Tile-Grid Diagramm -->
+      <div class="card" style="flex:1;">
+        <h3>Tile-Koordinaten bei Zoom 2 (4×4 Kacheln)</h3>
+        <svg viewBox="0 0 320 200" style="width:100%; margin-top:8px;" xmlns="http://www.w3.org/2000/svg">
+          <!-- Grid -->
+          <defs>
+            <marker id="arr" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+              <path d="M1,1 L7,4 L1,7 Z" fill="#667"/>
+            </marker>
+          </defs>
+          <rect x="10" y="20" width="260" height="160" rx="4" fill="#e8f0e8" stroke="#99bb99" stroke-width="1.5"/>
+          <!-- Kacheln 4×4 -->
+          <line x1="75" y1="20" x2="75" y2="180" stroke="#99bb99" stroke-width="1"/>
+          <line x1="140" y1="20" x2="140" y2="180" stroke="#99bb99" stroke-width="1"/>
+          <line x1="205" y1="20" x2="205" y2="180" stroke="#99bb99" stroke-width="1"/>
+          <line x1="10" y1="60" x2="270" y2="60" stroke="#99bb99" stroke-width="1"/>
+          <line x1="10" y1="100" x2="270" y2="100" stroke="#99bb99" stroke-width="1"/>
+          <line x1="10" y1="140" x2="270" y2="140" stroke="#99bb99" stroke-width="1"/>
+          <!-- Labels X -->
+          <text x="42" y="14" font-size="11" fill="#445" font-family="monospace" text-anchor="middle">x=0</text>
+          <text x="107" y="14" font-size="11" fill="#445" font-family="monospace" text-anchor="middle">x=1</text>
+          <text x="172" y="14" font-size="11" fill="#445" font-family="monospace" text-anchor="middle">x=2</text>
+          <text x="237" y="14" font-size="11" fill="#445" font-family="monospace" text-anchor="middle">x=3</text>
+          <!-- Labels Y -->
+          <text x="6" y="44" font-size="11" fill="#445" font-family="monospace" text-anchor="end">y=0</text>
+          <text x="6" y="84" font-size="11" fill="#445" font-family="monospace" text-anchor="end">y=1</text>
+          <text x="6" y="124" font-size="11" fill="#445" font-family="monospace" text-anchor="end">y=2</text>
+          <text x="6" y="164" font-size="11" fill="#445" font-family="monospace" text-anchor="end">y=3</text>
+          <!-- Highlighted tile (2,1) -->
+          <rect x="140" y="60" width="65" height="40" fill="rgba(30,95,142,.25)" stroke="#1E5F8E" stroke-width="2" rx="2"/>
+          <text x="172" y="85" font-size="11" fill="#1E5F8E" font-family="monospace" text-anchor="middle" font-weight="bold">(2,1)</text>
+          <!-- Wien -->
+          <circle cx="172" cy="78" r="4" fill="#EA4335" stroke="white" stroke-width="1.5"/>
+          <text x="180" y="72" font-size="10" fill="#222" font-family="sans-serif">Wien</text>
+        </svg>
+        <p style="font-size:13px;">→ <code>https://tile.openstreetmap.org/2/2/1.png</code></p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h3>Zoom-Level: Auflösung verdoppelt sich</h3>
+        <table>
+          <tr><th>Zoom</th><th>Kacheln gesamt</th><th>Typische Verwendung</th></tr>
+          <tr><td><strong>0</strong></td><td>1 × 1 = 1</td><td>Weltkarte</td></tr>
+          <tr><td><strong>5</strong></td><td>32 × 32 = 1 024</td><td>Länder</td></tr>
+          <tr><td><strong>10</strong></td><td>1 024²  = 1 M</td><td>Stadtregion</td></tr>
+          <tr><td><strong>13</strong></td><td>8 192² = 67 M</td><td>Straßen</td></tr>
+          <tr><td><strong>15</strong></td><td>32 768² = 1 Mrd.</td><td>Häuserblöcke</td></tr>
+        </table>
+      </div>
+      <div class="card blue">
+        <h3>Welche Tiles werden gebraucht?</h3>
+        <p>Aus Bounding-Box (Hüllrechteck aller GPS-Punkte) + Rand-Padding berechnen wir den Tile-Bereich:</p>
+        <pre style="font-size:12.5px; margin-top:8px;"><span class="ty">var</span> (tileXMin, tileYMin) =
+    <span class="fn">GlobalPixelToTile</span>(rangeMinGx, rangeMinGy);
+<span class="ty">var</span> (tileXMax, tileYMax) =
+    <span class="fn">GlobalPixelToTile</span>(rangeMaxGx, rangeMaxGy);
+
+<span class="cmt">// Alle Tiles im Rechteck:</span>
+<span class="kw">for</span> (<span class="ty">int</span> tx = tileXMin; tx &lt;= tileXMax; tx++)
+  <span class="kw">for</span> (<span class="ty">int</span> ty = tileYMin; ty &lt;= tileYMax; ty++)
+    tiles.<span class="fn">Add</span>(<span class="kw">new</span> <span class="ty">MapTile</span>(zoom, tx, ty));</pre>
+      </div>
+      <div class="card green">
+        <h3>Tile-URL — zwei Anbieter</h3>
+        <p><strong>MapTiler</strong> (API-Key): hochwertige Karten<br>
+           <strong>OpenStreetMap</strong> (kostenlos): Fallback ohne Key<br>
+           Beide liefern identisch adressierte 256×256 PNGs.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 6 — Mosaik & Crop
+     ══════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s6">
+  <div class="slide-header">
+    <span class="slide-num">ALGORITHMUS 3</span>
+    <h2>Mosaik-Komposition &amp; Zuschnitt</h2>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <div class="card accent">
+        <h3>Schritt 1 — Tiles parallel herunterladen</h3>
+        <pre style="font-size:12.5px;"><span class="kw">var</span> semaphore = <span class="kw">new</span> <span class="ty">SemaphoreSlim</span>(maxParallel);
+
+<span class="kw">await</span> Task.<span class="fn">WhenAll</span>(tiles.<span class="fn">Select</span>(<span class="kw">async</span> tile =>
+{
+    <span class="kw">await</span> semaphore.<span class="fn">WaitAsync</span>(ct);
+    <span class="kw">try</span> {
+        <span class="ty">var</span> data = <span class="kw">await</span> _cache.<span class="fn">TryGetAsync</span>(key, ct)
+                   ?? <span class="kw">await</span> <span class="fn">DownloadAndCacheAsync</span>(tile, ct);
+        <span class="kw">lock</span> (tileData) tileData[tile] = data;
+    } <span class="kw">finally</span> { semaphore.<span class="fn">Release</span>(); }
+}));</pre>
+        <p style="margin-top:8px;font-size:13px;">
+          <span class="badge blue">Task.WhenAll</span> = alle Tiles gleichzeitig (bis max. 4 parallel)<br>
+          <span class="badge gray">SemaphoreSlim</span> = begrenzt gleichzeitige HTTP-Anfragen
+        </p>
+      </div>
+      <div class="card green">
+        <h3>Tile-Cache (FileTileCache)</h3>
+        <p>Jeder heruntergeladene Tile wird als Datei gespeichert (<code>.tile-cache/osm/z/x/y.png</code>). Atomares Schreiben via Temp-Datei + Move verhindert korrupte Caches.</p>
+      </div>
+    </div>
+    <div class="col">
+      <!-- Mosaik-Diagramm -->
+      <div class="card" style="flex:1; display:flex; flex-direction:column;">
+        <h3>Schritt 2 — Mosaic zusammensetzen, dann ausschneiden</h3>
+        <svg viewBox="0 0 360 220" style="width:100%; flex:1;" xmlns="http://www.w3.org/2000/svg">
+          <!-- Großes Mosaik -->
+          <rect x="10" y="10" width="200" height="200" rx="4" fill="#c8d8c0" stroke="#aac" stroke-width="1.5"/>
+          <line x1="77" y1="10" x2="77" y2="210" stroke="#aac" stroke-width="1"/>
+          <line x1="144" y1="10" x2="144" y2="210" stroke="#aac" stroke-width="1"/>
+          <line x1="10" y1="77" x2="210" y2="77" stroke="#aac" stroke-width="1"/>
+          <line x1="10" y1="144" x2="210" y2="144" stroke="#aac" stroke-width="1"/>
+          <text x="110" y="222" font-size="11" fill="#556" text-anchor="middle" font-family="sans-serif">Mosaik (3×3 Tiles)</text>
+
+          <!-- Crop-Rechteck -->
+          <rect x="30" y="30" width="130" height="100" rx="3" fill="none" stroke="#1E5F8E" stroke-width="2.5" stroke-dasharray="6,3"/>
+          <text x="95" y="24" font-size="11" fill="#1E5F8E" text-anchor="middle" font-family="sans-serif" font-weight="bold">Crop-Ausschnitt</text>
+
+          <!-- Pfeil zum Ergebnis -->
+          <path d="M 220,105 L 240,105" stroke="#667" stroke-width="2" marker-end="url(#arr2)"/>
+          <defs>
+            <marker id="arr2" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+              <path d="M1,1 L7,4 L1,7 Z" fill="#667"/>
+            </marker>
+          </defs>
+
+          <!-- Ergebnis-Bild -->
+          <rect x="245" y="55" width="105" height="80" rx="4" fill="#d4e4c8" stroke="#1E5F8E" stroke-width="2"/>
+          <text x="297" y="103" font-size="11" fill="#1E5F8E" text-anchor="middle" font-family="sans-serif" font-weight="bold">1600×1200 px</text>
+          <text x="297" y="117" font-size="10" fill="#667" text-anchor="middle" font-family="sans-serif">Basiskarte</text>
+        </svg>
+        <pre style="font-size:12px; margin-top:6px;"><span class="cmt">// Zentriert auf Bounding-Box-Mitte:</span>
+<span class="ty">int</span> cropX = <span class="fn">Clamp</span>(
+    (<span class="ty">int</span>)(cenGx - moOriGx - targetW / <span class="num">2.0</span>),
+    <span class="num">0</span>, mosaicW - targetW);
+<span class="ty">int</span> cropY = <span class="fn">Clamp</span>(
+    (<span class="ty">int</span>)(cenGy - moOriGy - targetH / <span class="num">2.0</span>),
+    <span class="num">0</span>, mosaicH - targetH);
+
+using <span class="ty">var</span> baseImage = mosaic.<span class="fn">Clone</span>(ctx =>
+    ctx.<span class="fn">Crop</span>(<span class="kw">new</span> <span class="ty">Rectangle</span>(cropX, cropY, targetW, targetH)));</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 7 — Stopp-Erkennung
+     ══════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s7">
+  <div class="slide-header">
+    <span class="slide-num">ALGORITHMUS 4</span>
+    <h2>Stopp-Erkennung</h2>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <div class="card accent">
+        <h3>Idee</h3>
+        <p class="big">Wenn zwischen zwei <strong>ausgewählten</strong> Fotos eine <strong>Zeitlücke größer als die Schwelle</strong> (z. B. 30 Minuten) liegt, hat der Reisende eine Pause gemacht — ein Stopp!</p>
+      </div>
+
+      <!-- Timeline SVG -->
+      <div class="card" style="flex:1; display:flex; flex-direction:column;">
+        <h3>Zeitstrahl-Beispiel (Schwelle = 30 min)</h3>
+        <svg viewBox="0 0 340 140" style="width:100%; flex:1;" xmlns="http://www.w3.org/2000/svg">
+          <!-- Zeitlinie -->
+          <line x1="20" y1="70" x2="320" y2="70" stroke="#ccc" stroke-width="2"/>
+          <!-- Fotos als Punkte -->
+          <!-- 8:00 -->
+          <circle cx="30" cy="70" r="6" fill="#4285F4" stroke="white" stroke-width="2"/>
+          <text x="30" y="58" font-size="9" fill="#556" text-anchor="middle" font-family="sans-serif">8:00</text>
+          <!-- 8:15 -->
+          <circle cx="80" cy="70" r="6" fill="#4285F4" stroke="white" stroke-width="2"/>
+          <text x="80" y="58" font-size="9" fill="#556" text-anchor="middle" font-family="sans-serif">8:15</text>
+          <!-- 8:55 — nach Stopp 1 -->
+          <circle cx="170" cy="70" r="6" fill="#4285F4" stroke="white" stroke-width="2"/>
+          <text x="170" y="58" font-size="9" fill="#556" text-anchor="middle" font-family="sans-serif">8:55</text>
+          <!-- 9:10 -->
+          <circle cx="220" cy="70" r="6" fill="#4285F4" stroke="white" stroke-width="2"/>
+          <text x="220" y="58" font-size="9" fill="#556" text-anchor="middle" font-family="sans-serif">9:10</text>
+          <!-- 10:05 — nach Stopp 2 / Final -->
+          <circle cx="310" cy="70" r="6" fill="#4285F4" stroke="white" stroke-width="2"/>
+          <text x="310" y="58" font-size="9" fill="#556" text-anchor="middle" font-family="sans-serif">10:05</text>
+
+          <!-- Lücke 1: 8:15 → 8:55 = 40 min > 30 min -->
+          <rect x="82" y="55" width="86" height="30" rx="4" fill="rgba(234,67,53,.15)" stroke="#EA4335" stroke-width="1.5" stroke-dasharray="4,2"/>
+          <text x="125" y="96" font-size="10" fill="#EA4335" text-anchor="middle" font-family="sans-serif">40 min → STOPP</text>
+
+          <!-- Lücke 2: 9:10 → 10:05 = 55 min > 30 min -->
+          <rect x="222" y="55" width="86" height="30" rx="4" fill="rgba(234,67,53,.15)" stroke="#EA4335" stroke-width="1.5" stroke-dasharray="4,2"/>
+          <text x="265" y="96" font-size="10" fill="#EA4335" text-anchor="middle" font-family="sans-serif">55 min → STOPP</text>
+
+          <!-- Stopp-Marker auf der Linie -->
+          <circle cx="80" cy="70" r="9" fill="none" stroke="#EA4335" stroke-width="2.5"/>
+          <circle cx="220" cy="70" r="9" fill="none" stroke="#EA4335" stroke-width="2.5"/>
+
+          <!-- Final -->
+          <text x="310" y="88" font-size="9" fill="#1E5F8E" text-anchor="middle" font-family="sans-serif">+ Final</text>
+        </svg>
+      </div>
+    </div>
+    <div class="col">
+      <pre><span class="kw">public</span> <span class="ty">IReadOnlyList</span>&lt;<span class="ty">StopPoint</span>&gt; <span class="fn">DetectStops</span>(
+    <span class="ty">IReadOnlyList</span>&lt;<span class="ty">Photo</span>&gt; selectedSorted,
+    <span class="ty">TimeSpan</span> threshold,
+    <span class="ty">bool</span> addFinalSummary)
+{
+    <span class="ty">var</span> gps = selectedSorted
+        .<span class="fn">Where</span>(p => p.Latitude.<span class="fn">HasValue</span>
+                 && p.DateTime.<span class="fn">HasValue</span>)
+        .<span class="fn">ToList</span>();
+
+    <span class="ty">var</span> result = <span class="kw">new</span> <span class="ty">List</span>&lt;<span class="ty">StopPoint</span>&gt;();
+
+    <span class="kw">for</span> (<span class="ty">int</span> i = <span class="num">0</span>; i &lt; gps.Count - <span class="num">1</span>; i++)
+    {
+        <span class="ty">var</span> gap = gps[i+<span class="num">1</span>].DateTime!.Value
+                - gps[i].DateTime!.Value;
+
+        <span class="kw">if</span> (gap > threshold)
+            result.<span class="fn">Add</span>(<span class="kw">new</span> <span class="ty">StopPoint</span>(
+                gps[i].DateTime!.Value.<span class="fn">AddSeconds</span>(<span class="num">1</span>),
+                gps[i].Latitude!.Value,
+                gps[i].Longitude!.Value));
+    }
+
+    <span class="cmt">// Letztes Foto = Zusammenfassungskarte der ganzen Reise</span>
+    <span class="kw">if</span> (addFinalSummary && gps.Count > <span class="num">0</span>)
+        result.<span class="fn">Add</span>(<span class="kw">new</span> <span class="ty">StopPoint</span>(
+            gps[^<span class="num">1</span>].DateTime!.Value.<span class="fn">AddSeconds</span>(<span class="num">1</span>),
+            gps[^<span class="num">1</span>].Latitude!.Value,
+            gps[^<span class="num">1</span>].Longitude!.Value));
+
+    <span class="kw">return</span> result;
+}</pre>
+      <div class="card blue" style="margin-top:0;">
+        <h3>Wichtig: nur Selected-Fotos!</h3>
+        <p>Die Stopp-Erkennung arbeitet nur mit <strong>ausgewählten</strong> Fotos — das ist die <em>narrative</em> Reiseauswahl des Nutzers. Nicht ausgewählte Fotos beeinflussen die Stopp-Logik nicht.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 8 — Polyline & Punktvereinfachung
+     ══════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s8">
+  <div class="slide-header">
+    <span class="slide-num">ALGORITHMUS 5</span>
+    <h2>Polyline — Route zeichnen</h2>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <div class="card accent">
+        <h3>Datenquelle der Route: ALLE GPS-Fotos</h3>
+        <p class="big">Die Polyline zeigt den realen Streckenverlauf — durch <strong>alle</strong> GPS-Fotos (auch nicht ausgewählte). Zeitbasierter Filter: alles bis zum Stopp-Zeitstempel.</p>
+      </div>
+      <pre style="font-size:13px;"><span class="cmt">// Für jeden Stopp individuell:</span>
+<span class="ty">var</span> routePixels = allGpsPhotos
+    .<span class="fn">Where</span>(p => p.DateTime!.Value &lt;= stop.Timestamp)
+    .<span class="fn">Select</span>(p => <span class="fn">ToImg</span>(p.Latitude!.Value,
+                          p.Longitude!.Value))
+    .<span class="fn">ToList</span>();
+
+<span class="ty">var</span> simplified = <span class="fn">SimplifyByPixelDistance</span>(routePixels);
+
+<span class="kw">if</span> (simplified.Length >= <span class="num">2</span>)
+{
+    img.<span class="fn">Mutate</span>(ctx => {
+        <span class="cmt">// Weiße Kontur (8 px) + blaue Linie (5 px)</span>
+        ctx.<span class="fn">DrawLine</span>(<span class="kw">new</span> <span class="ty">SolidPen</span>(Color.White, <span class="num">8f</span>),
+                       simplified);
+        ctx.<span class="fn">DrawLine</span>(<span class="kw">new</span> <span class="ty">SolidPen</span>(Color.<span class="fn">ParseHex</span>(<span class="str">"4285F4"</span>), <span class="num">5f</span>),
+                       simplified);
+    });
+}</pre>
+      <div class="card">
+        <h3>Warum zeitbasiert statt indexbasiert?</h3>
+        <p>Stopps kommen aus den <em>Selected</em>-Fotos, Route aus <em>allen</em> Fotos — beide Listen haben verschiedene Indizes. Zeit ist der gemeinsame Nenner.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card green">
+        <h3>Punktvereinfachung — SimplifyByPixelDistance</h3>
+        <p style="margin-bottom:8px;">200 Foto-Punkte erzeugen meist 150+ Pixel-Punkte, von denen viele weniger als 2 px auseinander liegen. Der Vereinfachungs-Algorithmus filtert überflüssige Punkte:</p>
+      </div>
+      <pre style="font-size:12.5px;"><span class="kw">private static</span> <span class="ty">PointF</span>[] <span class="fn">SimplifyByPixelDistance</span>(
+    <span class="ty">IReadOnlyList</span>&lt;<span class="ty">PointF</span>&gt; points,
+    <span class="ty">float</span> minDistancePx = <span class="num">2.0f</span>)
+{
+    <span class="ty">var</span> result = <span class="kw">new</span> <span class="ty">List</span>&lt;<span class="ty">PointF</span>&gt; { points[<span class="num">0</span>] };
+
+    <span class="kw">for</span> (<span class="ty">int</span> i = <span class="num">1</span>; i &lt; points.Count - <span class="num">1</span>; i++)
+    {
+        <span class="ty">var</span> last = result[^<span class="num">1</span>];
+        <span class="ty">float</span> dx = points[i].X - last.X;
+        <span class="ty">float</span> dy = points[i].Y - last.Y;
+        <span class="cmt">// Pythagoras (ohne Wurzel, zum Vergleich reicht dx²+dy²)</span>
+        <span class="kw">if</span> (dx*dx + dy*dy >= minDistancePx * minDistancePx)
+            result.<span class="fn">Add</span>(points[i]);
+    }
+
+    result.<span class="fn">Add</span>(points[^<span class="num">1</span>]); <span class="cmt">// letzten immer übernehmen!</span>
+    <span class="kw">return</span> result.<span class="fn">ToArray</span>();
+}</pre>
+      <div class="card blue">
+        <h3>Effekt</h3>
+        <p>Typisch werden <strong>60–80 % der Punkte</strong> entfernt, ohne sichtbaren Qualitätsverlust. Der letzte Punkt (= Stopp) wird immer beibehalten, damit die Linie exakt am Marker endet.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 9 — Marker & Stil
+     ══════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s9">
+  <div class="slide-header">
+    <span class="slide-num">VISUALISIERUNG</span>
+    <h2>Marker &amp; Farbgebung</h2>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <div class="cols3" style="flex:none; gap:14px;">
+        <div class="card" style="text-align:center;">
+          <svg viewBox="0 0 60 60" width="60" height="60" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto 6px;">
+            <circle cx="30" cy="34" r="12" fill="rgba(0,0,0,.15)"/>
+            <circle cx="30" cy="30" r="12" fill="#EA4335" stroke="white" stroke-width="3"/>
+          </svg>
+          <strong>Aktueller Stopp</strong>
+          <p style="font-size:12px; margin-top:4px;">Radius: 9 px<br>Farbe: #EA4335<br>Weiße Kontur<br>Schatten-Offset</p>
+        </div>
+        <div class="card" style="text-align:center;">
+          <svg viewBox="0 0 60 60" width="60" height="60" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto 6px;">
+            <circle cx="30" cy="30" r="6" fill="#4285F4" stroke="white" stroke-width="2"/>
+          </svg>
+          <strong>Vergangener Stopp</strong>
+          <p style="font-size:12px; margin-top:4px;">Radius: 4 px<br>Farbe: #4285F4<br>Weiße Kontur</p>
+        </div>
+        <div class="card" style="text-align:center;">
+          <svg viewBox="0 0 60 60" width="60" height="60" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto 6px;">
+            <line x1="10" y1="30" x2="50" y2="30" stroke="white" stroke-width="9" stroke-linecap="round"/>
+            <line x1="10" y1="30" x2="50" y2="30" stroke="#4285F4" stroke-width="5.5" stroke-linecap="round"/>
+          </svg>
+          <strong>Polyline</strong>
+          <p style="font-size:12px; margin-top:4px;">Weiß: 8 px<br>Blau: 5 px<br>Übereinander</p>
+        </div>
+      </div>
+
+      <div class="card accent" style="margin-top:0;">
+        <h3>Farbpalette — Google Maps-Stil</h3>
+        <table style="font-size:13px;">
+          <tr>
+            <td><span style="display:inline-block;width:20px;height:12px;background:#4285F4;border-radius:3px;vertical-align:middle;"></span> Route</td>
+            <td><code>#4285F4</code></td>
+            <td>Google-Blau</td>
+          </tr>
+          <tr>
+            <td><span style="display:inline-block;width:20px;height:12px;background:#EA4335;border-radius:3px;vertical-align:middle;"></span> Stopp</td>
+            <td><code>#EA4335</code></td>
+            <td>Google-Rot</td>
+          </tr>
+          <tr>
+            <td><span style="display:inline-block;width:20px;height:12px;background:#4285F4;border:2px solid white;border-radius:50%;vertical-align:middle;width:14px;height:14px;"></span> Vergangen</td>
+            <td><code>#4285F4</code></td>
+            <td>kleinerer Kreis</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+    <div class="col">
+      <pre style="font-size:12.5px;"><span class="cmt">// Kreis zeichnen mit ImageSharp.Drawing</span>
+<span class="kw">private static void</span> <span class="fn">DrawDot</span>(
+    <span class="ty">Image</span>&lt;<span class="ty">Rgba32</span>&gt; image, <span class="ty">PointF</span> center,
+    <span class="ty">float</span> radius, <span class="ty">Color</span> fill,
+    <span class="ty">Color</span> border, <span class="ty">float</span> borderWidth)
+{
+    <span class="ty">var</span> circle = <span class="kw">new</span> <span class="ty">EllipsePolygon</span>(center,
+        <span class="kw">new</span> <span class="ty">SizeF</span>(radius * <span class="num">2</span>, radius * <span class="num">2</span>));
+
+    image.<span class="fn">Mutate</span>(ctx => {
+        ctx.<span class="fn">Fill</span>(<span class="kw">new</span> <span class="ty">SolidBrush</span>(fill), circle);
+        ctx.<span class="fn">Draw</span>(<span class="kw">new</span> <span class="ty">SolidPen</span>(border, borderWidth),
+                  circle);
+    });
+}
+
+<span class="cmt">// Schatten-Effekt durch verschobene Halbkreise</span>
+<span class="kw">private static void</span> <span class="fn">DrawShadowedDot</span>(...) {
+    <span class="ty">var</span> shadow = <span class="kw">new</span> <span class="ty">Color</span>(<span class="kw">new</span> <span class="ty">Rgba32</span>(<span class="num">0</span>,<span class="num">0</span>,<span class="num">0</span>,<span class="num">60</span>));
+    <span class="kw">for</span> (<span class="ty">int</span> i = <span class="num">1</span>; i &lt;= <span class="num">2</span>; i++) {
+        <span class="ty">var</span> sc = <span class="kw">new</span> <span class="ty">PointF</span>(center.X, center.Y + i*<span class="num">2</span>);
+        image.<span class="fn">Mutate</span>(ctx => ctx.<span class="fn">Fill</span>(<span class="kw">new</span> <span class="ty">SolidBrush</span>(shadow),
+            <span class="kw">new</span> <span class="ty">EllipsePolygon</span>(sc, ...)));
+    }
+    <span class="fn">DrawDot</span>(image, center, radius, fill, border, bw);
+}</pre>
+      <div class="card blue">
+        <h3>Attribution</h3>
+        <p>OSM und MapTiler verlangen sichtbare Quellenangabe. Sie wird mit <code>SystemFonts.TryGet</code> und <code>TextMeasurer.MeasureSize</code> unten rechts auf die Karte gezeichnet, auf einem halbtransparenten weißen Rechteck.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 10 — Bibliotheken
+     ══════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s10">
+  <div class="slide-header">
+    <span class="slide-num">BIBLIOTHEKEN</span>
+    <h2>Verwendete NuGet-Pakete</h2>
+  </div>
+  <div class="cols3" style="flex:1; min-height:0;">
+
+    <div class="col" style="gap:14px;">
+      <div class="card accent" style="flex:1;">
+        <h3>SixLabors.ImageSharp</h3>
+        <span class="badge blue">Bildverarbeitung</span>
+        <ul style="margin-top:10px;">
+          <li><strong>Image&lt;Rgba32&gt;</strong> — Bitmap im Speicher</li>
+          <li><strong>Image.Load()</strong> — PNG/JPEG einlesen</li>
+          <li><strong>img.Mutate()</strong> — Pixel-Operationen</li>
+          <li><strong>.DrawImage()</strong> — Tile auf Mosaik legen</li>
+          <li><strong>.Crop()</strong> — Ausschnitt wählen</li>
+          <li><strong>.SaveAsPngAsync()</strong> — asynchron speichern</li>
+        </ul>
+        <p style="margin-top:10px; font-size:12px; color:#445;">Cross-platform, keine GDI-Abhängigkeit, ideal für Server &amp; Tests.</p>
+      </div>
+    </div>
+
+    <div class="col" style="gap:14px;">
+      <div class="card green" style="flex:0.7;">
+        <h3>SixLabors.ImageSharp.Drawing</h3>
+        <span class="badge green">Vektorgrafik</span>
+        <ul style="margin-top:10px;">
+          <li><strong>EllipsePolygon</strong> — gefüllte Kreise</li>
+          <li><strong>RectangularPolygon</strong> — Rechtecke</li>
+          <li><strong>SolidBrush / SolidPen</strong> — Farbe &amp; Strich</li>
+          <li><strong>DrawLine()</strong> — Polyline zeichnen</li>
+          <li><strong>DrawText()</strong> — Attribution-Text</li>
+        </ul>
+      </div>
+      <div class="card" style="flex:0.6;">
+        <h3>SixLabors.Fonts</h3>
+        <ul>
+          <li><strong>SystemFonts.TryGet()</strong> — Schriftart suchen</li>
+          <li><strong>TextMeasurer.MeasureSize()</strong> — Textbreite messen</li>
+          <li>Fallback-Kette: Segoe UI → Arial → DejaVu Sans</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="col" style="gap:14px;">
+      <div class="card blue" style="flex:0.7;">
+        <h3>System.Net.Http</h3>
+        <span class="badge blue">HTTP-Downloads</span>
+        <ul style="margin-top:10px;">
+          <li><strong>IHttpClientFactory</strong> — verwaltet Verbindungen</li>
+          <li><strong>HttpClient.GetByteArrayAsync()</strong> — Tile-Bytes</li>
+          <li>Retry bei HTTP 429 (Rate Limit)</li>
+          <li>User-Agent Pflicht für OSM-API</li>
+        </ul>
+      </div>
+      <div class="card red" style="flex:0.7;">
+        <h3>Eigener Tile-Cache</h3>
+        <span class="badge red">Optimierung</span>
+        <ul style="margin-top:10px;">
+          <li>Dateisystem-Cache: <code>.tile-cache/</code></li>
+          <li>Atomares Schreiben via Temp-Datei + <strong>File.Move()</strong></li>
+          <li>Verhindert korrupte Tiles bei Absturz</li>
+          <li>Gleicher Tile = 0 Netzwerk-Anfragen bei Neugenerierung</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 11 — Testbarkeit
+     ══════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s11">
+  <div class="slide-header">
+    <span class="slide-num">QUALITÄT</span>
+    <h2>Testbarkeit durch Dependency Injection</h2>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <div class="card accent">
+        <h3>Problem: Echter Netzwerkzugriff in Tests</h3>
+        <p class="big">Unit-Tests sollen schnell, stabil und offline funktionieren. Echte Tile-Downloads würden Tests langsam, instabil und netzwerkabhängig machen.</p>
+      </div>
+      <div class="card green">
+        <h3>Lösung: Interface + FakeTileSource</h3>
+        <p>Der Renderer kennt <code>ITileSource</code> nur über ein Interface. Im Test wird eine <strong>FakeTileSource</strong> übergeben, die sofort gefärbte 256×256-Bitmaps zurückgibt:</p>
+      </div>
+      <pre style="font-size:12.5px;"><span class="kw">sealed class</span> <span class="ty">FakeTileSource</span> : <span class="ty">ITileSource</span>
+{
+    <span class="kw">public</span> <span class="ty">string</span> ProviderId      => <span class="str">"fake"</span>;
+    <span class="kw">public</span> <span class="ty">string</span> AttributionText => <span class="str">"Fake tiles"</span>;
+
+    <span class="kw">public</span> <span class="ty">Task</span>&lt;<span class="ty">byte</span>[]&gt; <span class="fn">GetTileAsync</span>(<span class="ty">MapTile</span> tile, ...)
+    {
+        <span class="cmt">// Einfarbige 256×256-PNG, Farbe variiert pro Tile</span>
+        <span class="ty">byte</span> r = (<span class="ty">byte</span>)((tile.X * <span class="num">37</span>) & <span class="num">0xFF</span>);
+        <span class="ty">byte</span> g = (<span class="ty">byte</span>)((tile.Y * <span class="num">71</span>) & <span class="num">0xFF</span>);
+        using <span class="ty">var</span> img = <span class="kw">new</span> <span class="ty">Image</span>&lt;<span class="ty">Rgba32</span>&gt;(<span class="num">256</span>, <span class="num">256</span>,
+            <span class="kw">new</span> <span class="ty">Rgba32</span>(r, g, <span class="num">180</span>));
+        using <span class="ty">var</span> ms = <span class="kw">new</span> <span class="ty">MemoryStream</span>();
+        img.<span class="fn">SaveAsPng</span>(ms);
+        <span class="kw">return</span> Task.<span class="fn">FromResult</span>(ms.<span class="fn">ToArray</span>());
+    }
+}</pre>
+    </div>
+    <div class="col">
+      <div class="card blue">
+        <h3>Was wird getestet?</h3>
+        <table style="font-size:13px;">
+          <tr><th>Test</th><th>Prüft</th></tr>
+          <tr><td>FewerThan2GpsPhotos</td><td>Return 0, kein Output-Dir</td></tr>
+          <tr><td>FivePhotosProduces3Pngs</td><td>Stopp-Erkennung korrekt</td></tr>
+          <tr><td>EachPng_Is1600x1200</td><td>Bildgröße exakt</td></tr>
+          <tr><td>FileNames_MatchPattern</td><td>Dateiname = Timestamp</td></tr>
+          <tr><td>LastWriteTime</td><td>Dateizeitstempel = Stopp-Zeit</td></tr>
+          <tr><td>NoSelectedPhotos</td><td>0 Karten ohne Auswahl</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3>Weitere isolierte Unit-Tests</h3>
+        <ul>
+          <li><strong>WebMercatorTests</strong> — Projektion mit Toleranz gegen Referenzwerte prüfen</li>
+          <li><strong>StopDetectorTests</strong> — Zeitlücken-Logik mit synthetischen Zeitstempeln</li>
+          <li><strong>FileTileCacheTests</strong> — Atomares Schreiben, Überschreiben, fehlende Keys</li>
+          <li><strong>PhotoFolderScannerMapTests</strong> — Karten-PNG wird erkannt, Timestamp geparst</li>
+        </ul>
+      </div>
+      <div class="card" style="background:#f0f7e8;">
+        <h3>62 Tests, alle grün ✓</h3>
+        <p>Alle Tests laufen offline und in unter 10 Sekunden durch.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SLIDE 12 — Zusammenfassung
+     ══════════════════════════════════════════════════════════════ -->
+<section class="slide" id="s12">
+  <div class="slide-header">
+    <span class="slide-num">ZUSAMMENFASSUNG</span>
+    <h2>Alle Konzepte im Überblick</h2>
+  </div>
+  <div class="full" style="display:flex; flex-direction:column; gap:16px;">
+    <div class="cols3">
+      <div class="card accent">
+        <h3>📐 Mathematik</h3>
+        <ul>
+          <li>Web-Mercator-Projektion (lat/lon → px)</li>
+          <li>Tile-Koordinaten aus globalen Pixeln</li>
+          <li>Zoom-Berechnung aus Bounding-Box</li>
+          <li>Pythagoras für Punkt-Abstandsfilter</li>
+        </ul>
+      </div>
+      <div class="card green">
+        <h3>🔧 Algorithmen</h3>
+        <ul>
+          <li>Zeitbasierte Stopp-Erkennung (O(n))</li>
+          <li>Pixelbasierte Linien-Vereinfachung</li>
+          <li>Paralleler Download mit SemaphoreSlim</li>
+          <li>Atomares Schreiben (Temp + Move)</li>
+        </ul>
+      </div>
+      <div class="card blue">
+        <h3>🎨 Visualisierung</h3>
+        <ul>
+          <li>Mosaik aus Tile-Kacheln komponieren</li>
+          <li>Crop zentriert auf Bounding-Box</li>
+          <li>Polyline: weiße Kontur + blauer Kern</li>
+          <li>EllipsePolygon für Marker</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" style="background: linear-gradient(135deg, #1a3a5c, #1E5F8E); color:white; padding:22px 28px;">
+      <div style="display:flex; gap:40px; align-items:center;">
+        <div style="flex:1;">
+          <h3 style="color:#a8d4f0; margin-bottom:8px;">Wichtigste Design-Entscheidung</h3>
+          <p style="color:rgba(255,255,255,.8); font-size:15px;">
+            <strong style="color:white;">Trennung von Route und Stopps:</strong> Polyline und Bounding-Box kommen aus <em>allen</em> GPS-Fotos (reale Spur), während Stopp-Erkennung und Marker nur auf <em>ausgewählten</em> Fotos basieren (narrative Auswahl). Dadurch wird die Karte sowohl technisch präzise als auch redaktionell kontrolliert.
+          </p>
+        </div>
+        <div style="flex:1; display:flex; gap:20px; font-size:14px;">
+          <div style="color:rgba(255,255,255,.7);">
+            <div style="margin-bottom:8px; color:#a8d4f0; font-weight:700;">Alle GPS-Fotos</div>
+            <div>→ Bounding-Box</div>
+            <div>→ Polyline</div>
+          </div>
+          <div style="color:#778899; font-size:20px; align-self:center;">vs.</div>
+          <div style="color:rgba(255,255,255,.7);">
+            <div style="margin-bottom:8px; color:#ffcc80; font-weight:700;">Nur Selected-Fotos</div>
+            <div>→ Stopp-Erkennung</div>
+            <div>→ Marker</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="background:#f6faf6; flex:none;">
+      <div style="display:flex; gap:30px; align-items:center; flex-wrap:wrap;">
+        <span style="font-weight:700; color:#2E7D32;">Klassen-Struktur:</span>
+        <span class="mono">WebMercator</span> <span style="color:#aaa;">→</span>
+        <span class="mono">StopDetector</span> <span style="color:#aaa;">→</span>
+        <span class="mono">ITileSource</span> / <span class="mono">ITileCache</span> <span style="color:#aaa;">→</span>
+        <span class="mono">TileMapRenderer</span> <span style="color:#aaa;">→</span>
+        <span class="mono">IMapRenderer</span>
+        <span class="badge green" style="margin-left:auto;">62 Tests grün</span>
+        <span class="badge blue">0 Warnings</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+</div><!-- /deck -->
+
+<!-- Navigation -->
+<nav class="nav">
+  <button id="btnPrev" title="Zurück (←)">&#8592;</button>
+  <span id="counter">1 / 12</span>
+  <button id="btnNext" title="Weiter (→)">&#8594;</button>
+  <span class="hint">← → Pfeiltasten</span>
+</nav>
+
+<script>
+(function(){
+  const slides  = Array.from(document.querySelectorAll('.slide'));
+  const total   = slides.length;
+  const counter = document.getElementById('counter');
+  const btnPrev = document.getElementById('btnPrev');
+  const btnNext = document.getElementById('btnNext');
+  const progress= document.getElementById('progress');
+  let current   = 0;
+
+  function go(n) {
+    if (n < 0 || n >= total) return;
+    slides[current].classList.remove('active');
+    slides[current].classList.add('prev');
+    setTimeout(() => slides[current > n ? n+1 : current]?.classList.remove('prev'), 400);
+    current = n;
+    slides[current].classList.add('active');
+    counter.textContent = `${current + 1} / ${total}`;
+    btnPrev.disabled = current === 0;
+    btnNext.disabled = current === total - 1;
+    progress.style.width = `${((current + 1) / total) * 100}%`;
+    // Clean up prev class on old slide after transition
+    setTimeout(() => {
+      slides.forEach((s, i) => { if (i !== current) s.classList.remove('prev'); });
+    }, 450);
+  }
+
+  btnPrev.addEventListener('click', () => go(current - 1));
+  btnNext.addEventListener('click', () => go(current + 1));
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown'  || e.key === ' ') go(current + 1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')                     go(current - 1);
+    if (e.key === 'Home')  go(0);
+    if (e.key === 'End')   go(total - 1);
+  });
+
+  go(0);
+})();
+</script>
+</body>
+</html>

@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TravelJournal.Core\TravelJournal.Core.csproj" />
+    <ProjectReference Include="..\TravelJournal.WebExporter\TravelJournal.WebExporter.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -9,7 +10,9 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.7" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.7" />
     <PackageReference Include="Ookii.Dialogs.Wpf" Version="5.0.1" />
+    <PackageReference Include="WPF-UI" Version="3.*" />
   </ItemGroup>
+
 
   <ItemGroup>
     <None Update="appsettings.json">

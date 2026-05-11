@@ -9,8 +9,8 @@ public class StopDetectorTests
     private static readonly TimeSpan Threshold = TimeSpan.FromMinutes(30);
     private readonly StopDetector _sut = new();
 
-    private static Photo MakePhoto(DateTime dt, double? lat = 48.0, double? lon = 16.0)
-        => new() { DateTime = dt, Latitude = lat, Longitude = lon };
+    private static Photo MakePhoto(DateTime dt, double? lat = 48.0, double? lon = 16.0, string? location = null)
+        => new() { DateTime = dt, Latitude = lat, Longitude = lon, Location = location };
 
     [Fact]
     public void AllWithin5Min_NoFinalSummary_ReturnsEmpty()
@@ -109,5 +109,22 @@ public class StopDetectorTests
         var stops = _sut.DetectStops(photos, Threshold, addFinalSummary: false);
 
         stops[0].Timestamp.Should().Be(t0.AddSeconds(1));
+    }
+
+    [Fact]
+    public void Location_IsPassedThroughFromPhoto()
+    {
+        var t0 = new DateTime(2024, 7, 1, 10, 0, 0);
+        var photos = new[]
+        {
+            MakePhoto(t0,               location: "Villach"),
+            MakePhoto(t0.AddMinutes(60), location: "Graz"),
+        };
+
+        var stops = _sut.DetectStops(photos, Threshold, addFinalSummary: true);
+
+        // Gap stop uses photo[0].Location; Final-Summary uses photo[1].Location
+        stops[0].Location.Should().Be("Villach");
+        stops[1].Location.Should().Be("Graz");
     }
 }

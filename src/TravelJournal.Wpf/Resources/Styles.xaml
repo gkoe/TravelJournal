@@ -209,4 +209,31 @@
         <Setter Property="FontFamily"  Value="Segoe UI"/>
     </Style>
 
+    <!-- ── Toolbar-Typografie (Schritt 15) ──────────────── -->
+    <Style x:Key="ToolbarSectionHeader" TargetType="TextBlock">
+        <Setter Property="FontSize"   Value="11"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+        <Setter Property="Typography.Capitals" Value="AllSmallCaps"/>
+        <Setter Property="Margin"     Value="0,0,0,8"/>
+    </Style>
+
+    <Style x:Key="ToolbarSubsectionHeader" TargetType="TextBlock">
+        <Setter Property="FontSize"   Value="10"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}"/>
+        <Setter Property="Margin"     Value="2,8,0,4"/>
+    </Style>
+
+    <Style x:Key="ToolbarHintText" TargetType="TextBlock">
+        <Setter Property="FontSize"   Value="10"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+
+    <Style x:Key="ToolbarLabelText" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Margin"   Value="0,0,0,2"/>
+    </Style>
+
 </ResourceDictionary>

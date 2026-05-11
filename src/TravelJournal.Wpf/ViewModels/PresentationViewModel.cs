@@ -105,7 +105,7 @@ public sealed partial class PresentationViewModel : ObservableObject
     {
         _overlayTimer.Stop();
 
-        if (item.Overlay is null)
+        if (item.Overlay is null || item.OverrideDuration.HasValue || item.IsEndSlide)
         {
             OverlayDescription = null;
             OverlayLocation    = null;

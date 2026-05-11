@@ -45,11 +45,20 @@ public partial class App : Application
         services.AddSingleton<IFolderDialogService,   FolderDialogService>();
         services.AddSingleton<IThumbnailLoader,        ThumbnailLoader>();
         services.AddSingleton<IReverseGeocoderFactory, ReverseGeocoderFactory>();
-        services.AddSingleton<IConfirmDialogService,   ConfirmDialogService>();
+        services.AddSingleton<IConfirmDialogService,   FluentConfirmDialogService>();
         services.AddSingleton<IImageRotator,           ImageSharpImageRotator>();
         services.AddSingleton<IMapRendererFactory,     MapRendererFactory>();
         services.AddSingleton<UserSettingsService>();
         services.AddSingleton<ImageCropService>();
+        services.AddSingleton<TravelJournal.WebExporter.Services.ManifestBuilder>();
+        services.AddSingleton<TravelJournal.WebExporter.Services.ImageOptimizer>();
+        services.AddSingleton<TravelJournal.WebExporter.IWebPresentationExporter,
+                              TravelJournal.WebExporter.WebPresentationExporter>();
+        services.AddSingleton<IWebExportService, WebExportService>();
+        services.AddSingleton<TravelJournal.Core.Services.IHeicConverter,
+                              TravelJournal.Core.Services.MagickHeicConverter>();
+        services.AddSingleton<TravelJournal.Core.Services.IPhotoRenamer,
+                              TravelJournal.Core.Services.PhotoRenamer>();
         services.AddTransient<MainViewModel>();
         services.AddTransient<MainWindow>();
 

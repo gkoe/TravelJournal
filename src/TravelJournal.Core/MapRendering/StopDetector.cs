@@ -23,10 +23,11 @@ public sealed class StopDetector
             if (gap > threshold)
             {
                 result.Add(new StopPoint(
-                    gps[i].DateTime!.Value.AddSeconds(1),
-                    gps[i].Latitude!.Value,
-                    gps[i].Longitude!.Value,
-                    i));
+                    Timestamp:  gps[i].DateTime!.Value.AddSeconds(1),
+                    Latitude:   gps[i].Latitude!.Value,
+                    Longitude:  gps[i].Longitude!.Value,
+                    PhotoIndex: i,
+                    Location:   gps[i].Location));
             }
         }
 
@@ -34,10 +35,12 @@ public sealed class StopDetector
         {
             var last = gps[^1];
             result.Add(new StopPoint(
-                last.DateTime!.Value.AddSeconds(1),
-                last.Latitude!.Value,
-                last.Longitude!.Value,
-                gps.Count - 1));
+                Timestamp:     last.DateTime!.Value.AddSeconds(1),
+                Latitude:      last.Latitude!.Value,
+                Longitude:     last.Longitude!.Value,
+                PhotoIndex:    gps.Count - 1,
+                Location:      last.Location,
+                IsFinalSummary: true));
         }
 
         return result;
