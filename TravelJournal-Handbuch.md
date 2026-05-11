@@ -56,6 +56,8 @@ Für die Kartenerzeugung wird ein kostenloser **MapTiler**-Account benötigt (10
 ### Web-Export
 **Web-Präsentation exportieren** erzeugt einen selbstständig lauffähigen Ordner mit HTML, CSS und JavaScript — keine Internetverbindung, kein Server nötig. Einfach den Ordner an Freunde schicken oder auf einer Website veröffentlichen. Fotos werden auf 1920 px optimiert, EXIF-Daten entfernt.
 
+> **Tipp:** In Google Chrome läuft die Web-Präsentation mit `F11` im Vollbildmodus — ideal für eine entspannte Vorführung am Fernseher oder Beamer.
+
 ---
 
 ## Installation
