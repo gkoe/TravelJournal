@@ -2,6 +2,7 @@
 using CommunityToolkit.Mvvm.Input;
 using TravelJournal.Core.Presentation;
 using System.Globalization;
+using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -187,12 +188,39 @@ public sealed partial class PresentationViewModel : ObservableObject
                 bmp.DecodePixelWidth = 1920;
                 bmp.EndInit();
                 bmp.Freeze();
-                return (ImageSource)bmp;
+
+                var rotation = ReadExifRotation(path);
+                if (rotation == 0) return (ImageSource)bmp;
+
+                var rotated = new TransformedBitmap(bmp, new RotateTransform(rotation));
+                rotated.Freeze();
+                return (ImageSource)rotated;
             });
         }
         catch
         {
             return null;
         }
+    }
+
+    private static double ReadExifRotation(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            var decoder = BitmapDecoder.Create(stream,
+                BitmapCreateOptions.IgnoreColorProfile,
+                BitmapCacheOption.Default);
+            if (decoder.Frames[0].Metadata is not BitmapMetadata meta) return 0;
+            if (meta.GetQuery("/app1/ifd/{ushort=274}") is not ushort ori) return 0;
+            return ori switch
+            {
+                3 => 180,
+                6 =>  90,
+                8 => 270,
+                _ =>   0
+            };
+        }
+        catch { return 0; }
     }
 }
