@@ -28,6 +28,7 @@ Jedes Foto bekommt einen von fünf **Status**, den du per Tastendruck oder Konte
 
 ### Fotos bearbeiten
 - **Drehen** — `L` dreht nach links, `R` nach rechts, `S` speichert dauerhaft in die Datei. Bis zum Speichern ist die Drehung nur eine Vorschau — du kannst sie jederzeit verwerfen.
+- **Zuschneiden** — Ziehe mit der Maus einen Rahmen direkt im Detailbild auf. Die abgedunkelte Maske zeigt, welcher Bereich erhalten bleibt. Ein Klick auf den Haken ✓ im Auswahlrahmen schneidet das Foto dauerhaft zu und aktualisiert Vorschau und Metadaten sofort. Ein Klick außerhalb des Rahmens oder `Esc` verwirft die Auswahl ohne Änderung.
 - **Titel und Beschreibung** — Jedes Foto kann einen individuellen Titel und eine mehrzeilige Beschreibung bekommen. Beide erscheinen später in der Präsentation. Änderungen werden automatisch gespeichert.
 - **Metadaten im Blick** — Datum, GPS-Koordinaten, Höhe über dem Meeresspiegel, Auflösung und Dateigröße sind im Detailbereich immer sichtbar.
 
@@ -143,6 +144,7 @@ Doppelklick auf `TravelJournal.exe` — fertig.
 | `Leertaste` | Status zyklisch weiterschalten |
 | `L` / `R` | Foto links / rechts drehen (Vorschau) |
 | `S` | Drehung dauerhaft speichern |
+| `Esc` | Zuschnitt-Auswahl verwerfen |
 | `Entf` | Foto aus der Liste entfernen |
 | `F5` | Ordner neu scannen |
 | `Strg+M` | Karten generieren |
