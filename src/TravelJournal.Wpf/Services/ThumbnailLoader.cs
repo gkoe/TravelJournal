@@ -1,12 +1,16 @@
 ﻿using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Microsoft.Extensions.Logging;
 
 namespace TravelJournal.Wpf.Services;
 
 public class ThumbnailLoader : IThumbnailLoader
 {
     private static readonly DrawingImage Placeholder = CreatePlaceholder();
+    private readonly ILogger<ThumbnailLoader> _log;
+
+    public ThumbnailLoader(ILogger<ThumbnailLoader> log) => _log = log;
 
     public async Task<ImageSource> LoadAsync(string filePath, int decodePixelWidth = 240)
     {
@@ -31,8 +35,9 @@ public class ThumbnailLoader : IThumbnailLoader
                 return (ImageSource)rotated;
             });
         }
-        catch
+        catch (Exception ex)
         {
+            _log.LogWarning(ex, "Thumbnail konnte nicht geladen werden: {FilePath}", filePath);
             return Placeholder;
         }
     }

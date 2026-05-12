@@ -4,7 +4,10 @@ using TravelJournal.Wpf.ViewModels;
 using TravelJournal.Wpf.Views;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Serilog;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace TravelJournal.Wpf;
 
@@ -21,10 +24,42 @@ public partial class App : Application
             .AddJsonFile("appsettings.json", optional: true)
             .Build();
 
+        var logDir = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "TravelJournal", "logs");
+        System.IO.Directory.CreateDirectory(logDir);
+
+        Log.Logger = new LoggerConfiguration()
+            .ReadFrom.Configuration(config)
+            .CreateLogger();
+
+        DispatcherUnhandledException += (_, ex) =>
+        {
+            Log.Fatal(ex.Exception, "Unbehandelter UI-Fehler");
+            ex.Handled = true;
+            MessageBox.Show(
+                $"Ein unerwarteter Fehler ist aufgetreten:\n{ex.Exception.Message}",
+                "TravelJournal – Fehler",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (_, ex) =>
+        {
+            if (ex.ExceptionObject is Exception err)
+                Log.Fatal(err, "Unbehandelter Hintergrund-Fehler (IsTerminating={IsTerminating})", ex.IsTerminating);
+        };
+
+        TaskScheduler.UnobservedTaskException += (_, ex) =>
+        {
+            Log.Error(ex.Exception, "Unbeobachtete Task-Ausnahme");
+            ex.SetObserved();
+        };
+
         var contactEmail = config["Nominatim:ContactEmail"] ?? "deine@email.at";
         var userAgent    = $"TravelJournal/1.0 ({contactEmail})";
 
         var services = new ServiceCollection();
+        services.AddLogging(b => b.AddSerilog(dispose: true));
 
         services.AddHttpClient("tiles", c =>
         {
@@ -71,6 +106,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _services?.Dispose();
+        Log.CloseAndFlush();
         base.OnExit(e);
     }
 }

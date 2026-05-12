@@ -6,6 +6,7 @@ using TravelJournal.Core.Presentation;
 using TravelJournal.Core.Services;
 using TravelJournal.Wpf.Services;
 using TravelJournal.Wpf.Views;
+using Microsoft.Extensions.Logging;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
@@ -18,6 +19,7 @@ namespace TravelJournal.Wpf.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
+    private readonly ILogger<MainViewModel>  _log;
     private readonly IFolderDialogService    _folderDialog;
     private readonly IThumbnailLoader        _thumbnailLoader;
     private readonly PhotoFolderScanner      _scanner;
@@ -132,6 +134,7 @@ public partial class MainViewModel : ObservableObject
     public event Action? ScrollSelectedIntoViewRequested;
 
     public MainViewModel(
+        ILogger<MainViewModel>  log,
         IFolderDialogService    folderDialog,
         IThumbnailLoader        thumbnailLoader,
         PhotoFolderScanner      scanner,
@@ -147,6 +150,7 @@ public partial class MainViewModel : ObservableObject
         IHeicConverter          heicConverter,
         IPhotoRenamer           photoRenamer)
     {
+        _log                = log;
         _folderDialog       = folderDialog;
         _thumbnailLoader    = thumbnailLoader;
         _scanner            = scanner;
@@ -254,6 +258,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            _log.LogError(ex, "Auto-Save fehlgeschlagen");
             BackgroundActivityText = $"Speichern fehlgeschlagen: {ex.Message}";
         }
         finally
@@ -463,6 +468,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            _log.LogError(ex, "Ortsermittlung fehlgeschlagen");
             BackgroundActivityText = $"Ortsermittlung fehlgeschlagen: {ex.Message}";
         }
         finally
@@ -489,6 +495,7 @@ public partial class MainViewModel : ObservableObject
             try { System.IO.File.Delete(item.FullPath); }
             catch (Exception ex)
             {
+                _log.LogError(ex, "Foto konnte nicht gelöscht werden: {Path}", item.FullPath);
                 StatusText = $"Löschen fehlgeschlagen: {ex.Message}";
                 return;
             }
@@ -543,6 +550,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            _log.LogError(ex, "Zuschneiden fehlgeschlagen");
             StatusText = $"Zuschneiden fehlgeschlagen: {ex.Message}";
         }
         finally
@@ -639,6 +647,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            _log.LogError(ex, "Web-Export fehlgeschlagen");
             StatusText = $"Web-Export fehlgeschlagen: {ex.Message}";
         }
         finally
@@ -684,6 +693,7 @@ public partial class MainViewModel : ObservableObject
                 }
                 catch (Exception ex)
                 {
+                    _log.LogError(ex, "HEIC-Konvertierung fehlgeschlagen: {File}", item.Filename);
                     BackgroundActivityText = $"Fehler bei {item.Filename}: {ex.Message}";
                 }
             }
@@ -903,6 +913,7 @@ public partial class MainViewModel : ObservableObject
             }
             catch (Exception ex)
             {
+                _log.LogWarning(ex, "Kartendatei konnte nicht gelöscht werden: {File}", p.Filename);
                 BackgroundActivityText = $"Fehler beim Löschen einer Karte: {ex.Message}";
             }
             ct.ThrowIfCancellationRequested();
