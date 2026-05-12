@@ -314,7 +314,7 @@ public partial class MainViewModel : ObservableObject
         AfterStateChange();
     }
 
-    // ── Bulk Deselect ─────────────────────────────────────────
+    // ── Bulk Deselect / Select ────────────────────────────────
 
     [RelayCommand(CanExecute = nameof(CanDeselectAllOpen))]
     private void DeselectAllOpen()
@@ -325,6 +325,16 @@ public partial class MainViewModel : ObservableObject
     }
 
     private bool CanDeselectAllOpen() => Photos.Any(p => p.State == PhotoState.None);
+
+    [RelayCommand(CanExecute = nameof(CanSelectAllOpen))]
+    private void SelectAllOpen()
+    {
+        foreach (var photo in Photos.Where(p => p.State == PhotoState.None))
+            photo.State = PhotoState.Selected;
+        AfterStateChange();
+    }
+
+    private bool CanSelectAllOpen() => Photos.Any(p => p.State == PhotoState.None);
 
     // ── Cycle State ───────────────────────────────────────────
 
@@ -364,6 +374,7 @@ public partial class MainViewModel : ObservableObject
 
         UpdateStatusText();
         DeselectAllOpenCommand.NotifyCanExecuteChanged();
+        SelectAllOpenCommand.NotifyCanExecuteChanged();
         GenerateMapsCommand.NotifyCanExecuteChanged();
         StartPresentationCommand.NotifyCanExecuteChanged();
         ExportWebPresentationCommand.NotifyCanExecuteChanged();
@@ -516,6 +527,7 @@ public partial class MainViewModel : ObservableObject
         SelectedGalleryItem = newItems.Count > 0
             ? newItems[Math.Min(currentIdx, newItems.Count - 1)]
             : null;
+        ScrollSelectedIntoViewRequested?.Invoke();
 
         if (CurrentFolder != null && isMissing)
         {
@@ -974,6 +986,7 @@ public partial class MainViewModel : ObservableObject
         GalleryItemsView.Refresh();
         UpdateStatusText();
         DeselectAllOpenCommand.NotifyCanExecuteChanged();
+        SelectAllOpenCommand.NotifyCanExecuteChanged();
         GenerateMapsCommand.NotifyCanExecuteChanged();
         StartPresentationCommand.NotifyCanExecuteChanged();
         ExportWebPresentationCommand.NotifyCanExecuteChanged();
@@ -1013,6 +1026,7 @@ public partial class MainViewModel : ObservableObject
 
             UpdateStatusText();
             DeselectAllOpenCommand.NotifyCanExecuteChanged();
+            SelectAllOpenCommand.NotifyCanExecuteChanged();
             GenerateMapsCommand.NotifyCanExecuteChanged();
             StartPresentationCommand.NotifyCanExecuteChanged();
 
