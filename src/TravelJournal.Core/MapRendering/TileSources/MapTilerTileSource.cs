@@ -55,6 +55,12 @@ public sealed class MapTilerTileSource : ITileSource
             response = await _client.GetAsync(url, ct);
         }
 
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+            throw new InvalidOperationException(
+                "MapTiler API-Key ungültig oder nicht berechtigt (403 Forbidden). " +
+                "Bitte prüfen: Key in appsettings.json korrekt eingetragen? " +
+                "Im MapTiler-Dashboard unter Account → Keys: keine URL-Einschränkungen gesetzt?");
+
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsByteArrayAsync(ct);
     }

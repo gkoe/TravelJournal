@@ -904,6 +904,11 @@ public partial class MainViewModel : ObservableObject
         {
             StatusText = "Karten-Generierung abgebrochen.";
         }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Karten-Generierung fehlgeschlagen");
+            StatusText = $"Karten-Generierung fehlgeschlagen: {ex.Message}";
+        }
         finally
         {
             IsBusy           = false;
