@@ -672,6 +672,57 @@ public partial class MainViewModel : ObservableObject
         !IsBusy && !string.IsNullOrEmpty(CurrentFolder)
         && (Photos.Any(p => p.State == PhotoState.Selected) || Photos.Any(p => p.IsMapPhoto));
 
+    // ── Fotos exportieren ────────────────────────────────────
+
+    [RelayCommand(CanExecute = nameof(CanExportPhotos))]
+    private async Task ExportPhotosAsync()
+    {
+        var selected = Photos.Where(p => p.State == PhotoState.Selected).ToList();
+        if (selected.Count == 0) return;
+
+        var dest = _folderDialog.PickFolder(null);
+        if (dest is null) return;
+
+        IsBusy = true;
+        var copied  = 0;
+        var skipped = 0;
+        try
+        {
+            for (var i = 0; i < selected.Count; i++)
+            {
+                var photo = selected[i];
+                BackgroundActivityText = $"Exportiere {i + 1}/{selected.Count}: {photo.Filename} …";
+
+                var target = System.IO.Path.Combine(dest, photo.Filename);
+                if (System.IO.File.Exists(target))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                await Task.Run(() => System.IO.File.Copy(photo.FullPath, target));
+                copied++;
+            }
+
+            StatusText = skipped == 0
+                ? $"{copied} Foto(s) exportiert."
+                : $"{copied} Foto(s) exportiert, {skipped} bereits vorhanden übersprungen.";
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Foto-Export fehlgeschlagen");
+            StatusText = $"Export fehlgeschlagen: {ex.Message}";
+        }
+        finally
+        {
+            BackgroundActivityText = null;
+            IsBusy = false;
+        }
+    }
+
+    private bool CanExportPhotos() =>
+        !IsBusy && Photos.Any(p => p.State == PhotoState.Selected);
+
     // ── HEIC konvertieren ────────────────────────────────────
 
     [RelayCommand(CanExecute = nameof(CanConvertHeic))]
