@@ -21,4 +21,16 @@ public class FilenameSafeNameTests
     {
         FilenameSafeName.FromLocation(input).Should().Be(expected);
     }
+
+    [Theory]
+    [InlineData("rhodos",        "rhodos")]   // Kleinschreibung bleibt erhalten
+    [InlineData("Rhodos 2026",   "Rhodos2026")]
+    [InlineData("Föhr-Urlaub",   "FoehrUrlaub")]
+    [InlineData("  spaces  ",    "spaces")]
+    [InlineData("!@#$%",         "")]
+    [InlineData(null,            "")]
+    public void Sanitize_PreservesCaseAndStripsInvalidChars(string? input, string expected)
+    {
+        FilenameSafeName.Sanitize(input).Should().Be(expected);
+    }
 }

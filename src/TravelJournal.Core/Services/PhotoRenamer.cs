@@ -1,15 +1,9 @@
 using TravelJournal.Core.Models;
-using TravelJournal.Core.Utilities;
-using System.Text.RegularExpressions;
 
 namespace TravelJournal.Core.Services;
 
 public sealed class PhotoRenamer : IPhotoRenamer
 {
-    public static readonly Regex AlreadyMatchingPattern = new(
-        @"^\d{4}_\d{2}_\d{2}_\d{2}_\d{2}(_[A-Za-z0-9]+)?(_\d+)?\.jpe?g$",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
     private readonly TourCsvWriter _csvWriter;
 
     public PhotoRenamer(TourCsvWriter csvWriter) => _csvWriter = csvWriter;
@@ -17,6 +11,7 @@ public sealed class PhotoRenamer : IPhotoRenamer
     public async Task<RenameResult> RenameAsync(
         string                     folderPath,
         IReadOnlyList<Photo>       currentEntries,
+        RenameOptions              options,
         IProgress<RenameProgress>? progress = null,
         CancellationToken          ct       = default)
     {
@@ -30,7 +25,7 @@ public sealed class PhotoRenamer : IPhotoRenamer
         }
 
         // 2) Rename-Plan (nur Foto-Einträge, nicht Karten)
-        var plan = BuildRenamingPlan(currentEntries);
+        var plan = BuildRenamingPlan(currentEntries, options);
 
         var renamed           = new List<RenameOperation>();
         var skippedAlready    = new List<string>();
@@ -149,7 +144,9 @@ public sealed class PhotoRenamer : IPhotoRenamer
         return new RenameResult(renamed, skippedAlready, skippedNoDateTime, errors);
     }
 
-    private static Dictionary<Photo, string> BuildRenamingPlan(IReadOnlyList<Photo> entries)
+    private static Dictionary<Photo, string> BuildRenamingPlan(
+        IReadOnlyList<Photo> entries,
+        RenameOptions        options)
     {
         var plan = new Dictionary<Photo, string>();
 
@@ -163,12 +160,9 @@ public sealed class PhotoRenamer : IPhotoRenamer
 
         foreach (var photo in sorted)
         {
-            var dt      = photo.DateTime!.Value;
-            var ext     = Path.GetExtension(photo.Filename).ToLowerInvariant();
-            var ortPart = FilenameSafeName.FromLocation(photo.Location);
-            var basename = string.IsNullOrEmpty(ortPart)
-                ? $"{dt:yyyy_MM_dd_HH_mm}"
-                : $"{dt:yyyy_MM_dd_HH_mm}_{ortPart}";
+            var dt       = photo.DateTime!.Value;
+            var ext      = Path.GetExtension(photo.Filename).ToLowerInvariant();
+            var basename = options.BuildBaseName(dt, photo.Location);
 
             var n = basenameCounts.GetValueOrDefault(basename, 0) + 1;
             basenameCounts[basename] = n;

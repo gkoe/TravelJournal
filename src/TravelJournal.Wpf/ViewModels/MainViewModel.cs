@@ -109,6 +109,34 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private int       _boundsPaddingPercent = 12;
     [ObservableProperty] private Int32Rect _cropRect             = Int32Rect.Empty;
 
+    // ── Umbenennen-Konfiguration ──────────────────────────────
+    [ObservableProperty] private string _renamePrefix   = string.Empty;
+    [ObservableProperty] private string _renameTemplate = RenameOptions.DefaultTemplate;
+
+    partial void OnRenamePrefixChanged(string value)
+    {
+        SaveUserSettings();
+        OnPropertyChanged(nameof(RenamePreview));
+    }
+
+    partial void OnRenameTemplateChanged(string value)
+    {
+        SaveUserSettings();
+        OnPropertyChanged(nameof(RenamePreview));
+    }
+
+    /// <summary>Beispielhafter Dateiname für die aktuelle Vorlage/den Präfix.</summary>
+    public string RenamePreview
+    {
+        get
+        {
+            var sample = new DateTime(2026, 4, 27, 12, 22, 57);
+            return CurrentRenameOptions.BuildBaseName(sample, "Rhodos-Stadt") + ".jpg";
+        }
+    }
+
+    private RenameOptions CurrentRenameOptions => new(RenamePrefix ?? string.Empty, RenameTemplate);
+
     partial void OnCropRectChanged(Int32Rect value) => ConfirmCropCommand.NotifyCanExecuteChanged();
 
     public IReadOnlyList<MapStyleInfo> AvailableMapStyles  => MapTilerStyles.Curated;
@@ -179,6 +207,10 @@ public partial class MainViewModel : ObservableObject
         _selectedMapStyleId   = saved.MapStyleId;
         _selectedLanguage     = saved.Language;
         _boundsPaddingPercent = saved.BoundsPaddingPercent;
+        _renamePrefix         = saved.RenamePrefix   ?? string.Empty;
+        _renameTemplate       = string.IsNullOrWhiteSpace(saved.RenameTemplate)
+            ? RenameOptions.DefaultTemplate
+            : saved.RenameTemplate;
 
         GalleryItemsView = CollectionViewSource.GetDefaultView(GalleryItems);
         GalleryItemsView.Filter = item => item is IGalleryItem gi && gi.MatchesFilter(ActiveFilter);
@@ -192,8 +224,10 @@ public partial class MainViewModel : ObservableObject
     {
         GenerateMapsCommand.NotifyCanExecuteChanged();
         ExportWebPresentationCommand.NotifyCanExecuteChanged();
+        ExportPhotosCommand.NotifyCanExecuteChanged();
         ConvertHeicCommand.NotifyCanExecuteChanged();
         RenamePhotosCommand.NotifyCanExecuteChanged();
+        ClearAllLocationsCommand.NotifyCanExecuteChanged();
     }
 
     // ── Scan / Folder ──────────────────────────────────────────
@@ -240,7 +274,10 @@ public partial class MainViewModel : ObservableObject
         {
             RequestAutoSave();
             if (e.PropertyName == nameof(PhotoViewModel.Location))
+            {
                 GenerateMapsCommand.NotifyCanExecuteChanged();
+                ClearAllLocationsCommand.NotifyCanExecuteChanged();
+            }
         }
     }
 
@@ -378,6 +415,7 @@ public partial class MainViewModel : ObservableObject
         GenerateMapsCommand.NotifyCanExecuteChanged();
         StartPresentationCommand.NotifyCanExecuteChanged();
         ExportWebPresentationCommand.NotifyCanExecuteChanged();
+        ExportPhotosCommand.NotifyCanExecuteChanged();
     }
 
     // ── Rotation ──────────────────────────────────────────────
@@ -489,6 +527,40 @@ public partial class MainViewModel : ObservableObject
             _geocodingCts = null;
         }
     }
+
+    [RelayCommand(CanExecute = nameof(CanClearAllLocations))]
+    private async Task ClearAllLocationsAsync()
+    {
+        if (CurrentFolder is null) return;
+
+        var affected = Photos.Where(p => !p.IsMapPhoto && !string.IsNullOrEmpty(p.Location)).ToList();
+        if (affected.Count == 0)
+        {
+            BackgroundActivityText = "Es sind keine Orte gesetzt.";
+            return;
+        }
+
+        var confirm = System.Windows.MessageBox.Show(
+            $"Bei {affected.Count} Foto(s) wird der Ort gelöscht.\n\n" +
+            "Karten bleiben unangetastet. Fortfahren?",
+            "Alle Orte löschen",
+            System.Windows.MessageBoxButton.YesNo,
+            System.Windows.MessageBoxImage.Question);
+        if (confirm != System.Windows.MessageBoxResult.Yes) return;
+
+        foreach (var photo in affected)
+            photo.Location = null;
+
+        var csvPath = System.IO.Path.Combine(CurrentFolder, "tour.csv");
+        await Task.Run(() => _csvWriter.Write(csvPath, AllCsvEntries()), CancellationToken.None);
+
+        GenerateMapsCommand.NotifyCanExecuteChanged();
+        BackgroundActivityText = $"Orte gelöscht ({affected.Count} Foto(s)). CSV gespeichert.";
+    }
+
+    private bool CanClearAllLocations() =>
+        !IsBusy && !string.IsNullOrEmpty(CurrentFolder)
+        && Photos.Any(p => !p.IsMapPhoto && !string.IsNullOrEmpty(p.Location));
 
     // ── Foto löschen ─────────────────────────────────────────
 
@@ -628,8 +700,10 @@ public partial class MainViewModel : ObservableObject
     {
         if (CurrentFolder is null) return;
 
-        var picked = _folderDialog.PickFolder(null);
-        if (picked is null) return;
+        var outputFolder = System.IO.Path.Combine(CurrentFolder, "webpresentation");
+
+        if (System.IO.Directory.Exists(outputFolder))
+            System.IO.Directory.Delete(outputFolder, recursive: true);
 
         IsBusy = true;
         try
@@ -645,14 +719,14 @@ public partial class MainViewModel : ObservableObject
                 };
             });
 
-            var count = await _webExport.ExportAsync(CurrentFolder, picked, progress, CancellationToken.None);
+            var count = await _webExport.ExportAsync(CurrentFolder, outputFolder, progress, CancellationToken.None);
             StatusText = count == 0
                 ? "Keine Inhalte zum Exportieren gefunden."
                 : $"Web-Präsentation erstellt ({count} Items).";
 
             if (count > 0)
             {
-                var indexPath = System.IO.Path.Combine(picked, "index.html");
+                var indexPath = System.IO.Path.Combine(outputFolder, "index.html");
                 System.Diagnostics.Process.Start(
                     new System.Diagnostics.ProcessStartInfo(indexPath) { UseShellExecute = true });
             }
@@ -780,12 +854,13 @@ public partial class MainViewModel : ObservableObject
     {
         if (CurrentFolder is null) return;
 
-        var renameableCount = Photos.Count(p =>
-            p.DateTime is not null
-            && !TravelJournal.Core.Services.PhotoRenamer.AlreadyMatchingPattern.IsMatch(p.Filename));
+        var renameableCount = Photos.Count(p => p.DateTime is not null);
+        var options = CurrentRenameOptions;
 
         var msg = $"Es werden bis zu {renameableCount} Fotos im Ordner umbenannt.\n\n" +
-                  $"• Schema: YYYY_MM_DD_hh_mm_Ort.jpg\n" +
+                  $"• Vorlage: {options.Template}\n" +
+                  (string.IsNullOrWhiteSpace(options.Prefix) ? "" : $"• Präfix: {options.Prefix}\n") +
+                  $"• Beispiel: {RenamePreview}\n" +
                   $"• tour.csv wird automatisch angepasst (Backup wird angelegt)\n" +
                   $"• Karten bleiben unangetastet\n\n" +
                   $"Fortfahren?";
@@ -807,7 +882,7 @@ public partial class MainViewModel : ObservableObject
         {
             var allEntries = Photos.Select(vm => vm.Photo).ToList();
 
-            var result = await _photoRenamer.RenameAsync(CurrentFolder, allEntries, progress);
+            var result = await _photoRenamer.RenameAsync(CurrentFolder, allEntries, options, progress);
 
             BackgroundActivityText =
                 $"{result.Renamed.Count} umbenannt, " +
@@ -1021,7 +1096,9 @@ public partial class MainViewModel : ObservableObject
     // ── Helpers ───────────────────────────────────────────────
 
     private void SaveUserSettings() =>
-        _userSettings.Save(new UserSettings(SelectedMapStyleId, SelectedLanguage, BoundsPaddingPercent));
+        _userSettings.Save(new UserSettings(
+            SelectedMapStyleId, SelectedLanguage, BoundsPaddingPercent,
+            RenamePrefix ?? string.Empty, RenameTemplate ?? RenameOptions.DefaultTemplate));
 
     private IEnumerable<Photo> AllCsvEntries() =>
         Photos.Select(vm => vm.Photo);
@@ -1046,6 +1123,7 @@ public partial class MainViewModel : ObservableObject
         GenerateMapsCommand.NotifyCanExecuteChanged();
         StartPresentationCommand.NotifyCanExecuteChanged();
         ExportWebPresentationCommand.NotifyCanExecuteChanged();
+        ExportPhotosCommand.NotifyCanExecuteChanged();
     }
 
     private async Task ScanInternalAsync(string folder)

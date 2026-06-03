@@ -223,11 +223,32 @@
                             </TextBox.Style>
                         </TextBox>
 
-                        <TextBlock Text="{Binding Location}"
-                                   Style="{StaticResource DetailLocationText}"
-                                   Margin="0,0,0,6"
-                                   Visibility="{Binding Location,
-                                       Converter={StaticResource NullOrEmptyToVisibilityConverter}}"/>
+                        <TextBlock Text="ORT" Style="{StaticResource DetailLabelText}"/>
+                        <TextBox Text="{Binding Location, UpdateSourceTrigger=PropertyChanged}"
+                                 FontSize="12"
+                                 Margin="0,2,0,8">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                    <Style.Triggers>
+                                        <Trigger Property="Text" Value="">
+                                            <Setter Property="Background">
+                                                <Setter.Value>
+                                                    <VisualBrush Stretch="None" AlignmentX="Left" AlignmentY="Center">
+                                                        <VisualBrush.Visual>
+                                                            <TextBlock Text="Ort eingeben…"
+                                                                       Foreground="#AAAAAA"
+                                                                       FontStyle="Italic"
+                                                                       FontSize="12"
+                                                                       Margin="7,0,0,0"/>
+                                                        </VisualBrush.Visual>
+                                                    </VisualBrush>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
 
                         <TextBlock Text="BESCHREIBUNG" Style="{StaticResource DetailLabelText}"/>
                         <TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
@@ -401,6 +422,28 @@
                                Icon="{uiM:SymbolIcon Rename24}"
                                Command="{Binding RenamePhotosCommand}"
                                HorizontalAlignment="Stretch" Margin="0,0,0,4"/>
+
+                    <ui:CardExpander Header="Namensschema" IsExpanded="False" Margin="0,0,0,8">
+                      <StackPanel>
+                        <TextBlock Style="{StaticResource ToolbarLabelText}" Text="Präfix (optional)" Margin="0,8,0,2"/>
+                        <TextBox Text="{Binding RenamePrefix, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Fester Text, der über den Platzhalter {prefix} eingesetzt wird (z.B. rhodos)."
+                                 Margin="0,0,0,8"/>
+
+                        <TextBlock Style="{StaticResource ToolbarLabelText}" Text="Vorlage" Margin="0,0,0,2"/>
+                        <TextBox Text="{Binding RenameTemplate, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Platzhalter: {prefix}, {datetime} (YYMMDD_hhmmss), {ort}"
+                                 Margin="0,0,0,4"/>
+                        <TextBlock Style="{StaticResource ToolbarHintText}"
+                                   TextWrapping="Wrap" Margin="0,0,0,6"
+                                   Text="Platzhalter: {prefix} · {datetime} (YYMMDD_hhmmss) · {ort}"/>
+                        <TextBlock Style="{StaticResource ToolbarHintText}" TextWrapping="Wrap">
+                          <Run Text="Beispiel: "/>
+                          <Run Text="{Binding RenamePreview, Mode=OneWay}" FontWeight="SemiBold"/>
+                        </TextBlock>
+                      </StackPanel>
+                    </ui:CardExpander>
+
                     <TextBlock Style="{StaticResource ToolbarHintText}"
                                Text="Tasten: 1/2/0 Status, Leertaste zyklisch, L/R drehen, S speichern"
                                Margin="0,0,0,8"/>
@@ -425,8 +468,13 @@
                     <ui:Button Content="{Binding GeocodingButtonText}"
                                Icon="{uiM:SymbolIcon Location24}"
                                Command="{Binding ToggleGeocodingCommand}"
-                               HorizontalAlignment="Stretch" Margin="0,0,0,8"
+                               HorizontalAlignment="Stretch" Margin="0,0,0,4"
                                ToolTip="Ermittelt für alle ausgewählten Fotos mit GPS-Daten den Ortsnamen via OpenStreetMap. Ein zweiter Klick bricht die laufende Abfrage ab."/>
+                    <ui:Button Content="Alle Orte löschen"
+                               Icon="{uiM:SymbolIcon Delete24}"
+                               Command="{Binding ClearAllLocationsCommand}"
+                               HorizontalAlignment="Stretch" Margin="0,0,0,8"
+                               ToolTip="Entfernt den ermittelten/eingegebenen Ort bei allen Fotos. Karten bleiben unangetastet."/>
 
                     <ui:CardExpander Header="Karten" IsExpanded="False" Margin="0,0,0,8">
                       <StackPanel>

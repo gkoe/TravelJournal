@@ -18,6 +18,9 @@ public class PhotoRenamerTests : IDisposable
         _sut = new PhotoRenamer(_csvWriter);
     }
 
+    private Task<RenameResult> Rename(IReadOnlyList<Photo> photos, RenameOptions? options = null)
+        => _sut.RenameAsync(_tempFolder, photos, options ?? RenameOptions.Default);
+
     [Fact]
     public async Task RenameAsync_NoDateTime_SkippedInNoDateTime()
     {
@@ -27,7 +30,7 @@ public class PhotoRenamerTests : IDisposable
             new() { Filename = "Start.jpg", DateTime = null }
         };
 
-        var result = await _sut.RenameAsync(_tempFolder, photos);
+        var result = await Rename(photos);
 
         result.SkippedNoDateTime.Should().ContainSingle().Which.Should().Be("Start.jpg");
         result.Renamed.Should().BeEmpty();
@@ -43,11 +46,11 @@ public class PhotoRenamerTests : IDisposable
             new() { Filename = "img.jpg", DateTime = new DateTime(2026, 4, 27, 9, 49, 24) }
         };
 
-        var result = await _sut.RenameAsync(_tempFolder, photos);
+        var result = await Rename(photos);
 
         result.Renamed.Should().ContainSingle();
-        result.Renamed[0].NewFilename.Should().Be("2026_04_27_09_49.jpg");
-        File.Exists(Path.Combine(_tempFolder, "2026_04_27_09_49.jpg")).Should().BeTrue();
+        result.Renamed[0].NewFilename.Should().Be("260427_094924.jpg");
+        File.Exists(Path.Combine(_tempFolder, "260427_094924.jpg")).Should().BeTrue();
     }
 
     [Fact]
@@ -64,77 +67,135 @@ public class PhotoRenamerTests : IDisposable
             }
         };
 
-        var result = await _sut.RenameAsync(_tempFolder, photos);
+        var result = await Rename(photos);
 
         result.Renamed.Should().ContainSingle();
-        result.Renamed[0].NewFilename.Should().Be("2026_04_27_12_22_Tarvis.jpg");
-        File.Exists(Path.Combine(_tempFolder, "2026_04_27_12_22_Tarvis.jpg")).Should().BeTrue();
+        result.Renamed[0].NewFilename.Should().Be("260427_122257_Tarvis.jpg");
+        File.Exists(Path.Combine(_tempFolder, "260427_122257_Tarvis.jpg")).Should().BeTrue();
     }
 
     [Fact]
-    public async Task RenameAsync_SameMinuteSameLocation_DisambiguatesWithSuffix()
+    public async Task RenameAsync_WithPrefix_PrefixPrependedToName()
+    {
+        CreateJpeg("img.jpg");
+        var photos = new List<Photo>
+        {
+            new()
+            {
+                Filename = "img.jpg",
+                DateTime = new DateTime(2026, 4, 27, 12, 22, 57),
+                Location = "Tarvis"
+            }
+        };
+
+        var options = new RenameOptions("rhodos", "{prefix}_{datetime}_{ort}");
+        var result  = await Rename(photos, options);
+
+        result.Renamed.Should().ContainSingle();
+        result.Renamed[0].NewFilename.Should().Be("rhodos_260427_122257_Tarvis.jpg");
+    }
+
+    [Fact]
+    public async Task RenameAsync_CustomTemplate_OrtAndPrefixOnly()
+    {
+        CreateJpeg("img.jpg");
+        var photos = new List<Photo>
+        {
+            new()
+            {
+                Filename = "img.jpg",
+                DateTime = new DateTime(2026, 4, 27, 12, 22, 57),
+                Location = "Tarvis"
+            }
+        };
+
+        var options = new RenameOptions("Rhodos", "{prefix}_{ort}");
+        var result  = await Rename(photos, options);
+
+        result.Renamed.Should().ContainSingle();
+        result.Renamed[0].NewFilename.Should().Be("Rhodos_Tarvis.jpg");
+    }
+
+    [Fact]
+    public async Task RenameAsync_EmptyLocation_NoTrailingSeparator()
+    {
+        CreateJpeg("img.jpg");
+        var photos = new List<Photo>
+        {
+            new() { Filename = "img.jpg", DateTime = new DateTime(2026, 4, 27, 12, 22, 57) }
+        };
+
+        var options = new RenameOptions("rhodos", "{prefix}_{datetime}_{ort}");
+        var result  = await Rename(photos, options);
+
+        result.Renamed.Should().ContainSingle();
+        result.Renamed[0].NewFilename.Should().Be("rhodos_260427_122257.jpg");
+    }
+
+    [Fact]
+    public async Task RenameAsync_SameSecondSameLocation_DisambiguatesWithSuffix()
     {
         CreateJpeg("img1.jpg");
         CreateJpeg("img2.jpg");
         CreateJpeg("img3.jpg");
-        var dt = new DateTime(2026, 4, 28, 10, 34, 0);
+        var dt = new DateTime(2026, 4, 28, 10, 34, 6);
         var photos = new List<Photo>
         {
-            new() { Filename = "img1.jpg", DateTime = dt.AddSeconds(6),  Location = "Chiusaforte / Scluse" },
-            new() { Filename = "img2.jpg", DateTime = dt.AddSeconds(19), Location = "Chiusaforte / Scluse" },
-            new() { Filename = "img3.jpg", DateTime = dt.AddSeconds(45), Location = "Chiusaforte / Scluse" },
+            new() { Filename = "img1.jpg", DateTime = dt, Location = "Chiusaforte / Scluse" },
+            new() { Filename = "img2.jpg", DateTime = dt, Location = "Chiusaforte / Scluse" },
+            new() { Filename = "img3.jpg", DateTime = dt, Location = "Chiusaforte / Scluse" },
         };
 
-        var result = await _sut.RenameAsync(_tempFolder, photos);
+        var result = await Rename(photos);
 
         result.Renamed.Should().HaveCount(3);
         result.Renamed.Select(r => r.NewFilename).Should().BeEquivalentTo([
-            "2026_04_28_10_34_ChiusaforteScluse.jpg",
-            "2026_04_28_10_34_ChiusaforteScluse_2.jpg",
-            "2026_04_28_10_34_ChiusaforteScluse_3.jpg"
+            "260428_103406_ChiusaforteScluse.jpg",
+            "260428_103406_ChiusaforteScluse_2.jpg",
+            "260428_103406_ChiusaforteScluse_3.jpg"
         ]);
     }
 
     [Fact]
     public async Task RenameAsync_AlreadyMatchingFilename_Skipped()
     {
-        CreateJpeg("2026_04_27_12_22_Tarvis.jpg");
+        CreateJpeg("260427_122200_Tarvis.jpg");
         var photos = new List<Photo>
         {
             new()
             {
-                Filename = "2026_04_27_12_22_Tarvis.jpg",
+                Filename = "260427_122200_Tarvis.jpg",
                 DateTime = new DateTime(2026, 4, 27, 12, 22, 0),
                 Location = "Tarvis"
             }
         };
 
-        var result = await _sut.RenameAsync(_tempFolder, photos);
+        var result = await Rename(photos);
 
         result.SkippedAlreadyMatching.Should().ContainSingle().Which
-            .Should().Be("2026_04_27_12_22_Tarvis.jpg");
+            .Should().Be("260427_122200_Tarvis.jpg");
         result.Renamed.Should().BeEmpty();
     }
 
     [Fact]
     public async Task RenameAsync_TwoPassChain_BothRenamedCorrectly()
     {
-        // A.jpg → B.jpg, B.jpg → C.jpg (typischer Ketten-Fall)
-        CreateJpeg("A.jpg");
+        // A wünscht den Namen, den B aktuell trägt → echte Kette, die nur über
+        // temporäre Zwischennamen kollisionsfrei aufzulösen ist.
+        CreateJpeg("260101_100100.jpg"); // photoA trägt B's Zielnamen
         CreateJpeg("B.jpg");
         var photos = new List<Photo>
         {
-            new() { Filename = "A.jpg", DateTime = new DateTime(2026, 1, 1, 10, 0, 0) },
-            new() { Filename = "B.jpg", DateTime = new DateTime(2026, 1, 1, 10, 1, 0) },
+            new() { Filename = "260101_100100.jpg", DateTime = new DateTime(2026, 1, 1, 10, 0, 0) },
+            new() { Filename = "B.jpg",             DateTime = new DateTime(2026, 1, 1, 10, 1, 0) },
         };
 
-        var result = await _sut.RenameAsync(_tempFolder, photos);
+        var result = await Rename(photos);
 
         result.Errors.Should().BeEmpty();
         result.Renamed.Should().HaveCount(2);
-        File.Exists(Path.Combine(_tempFolder, "2026_01_01_10_00.jpg")).Should().BeTrue();
-        File.Exists(Path.Combine(_tempFolder, "2026_01_01_10_01.jpg")).Should().BeTrue();
-        File.Exists(Path.Combine(_tempFolder, "A.jpg")).Should().BeFalse();
+        File.Exists(Path.Combine(_tempFolder, "260101_100000.jpg")).Should().BeTrue();
+        File.Exists(Path.Combine(_tempFolder, "260101_100100.jpg")).Should().BeTrue();
         File.Exists(Path.Combine(_tempFolder, "B.jpg")).Should().BeFalse();
     }
 
@@ -150,7 +211,7 @@ public class PhotoRenamerTests : IDisposable
             new() { Filename = "img.jpg", DateTime = new DateTime(2026, 5, 1, 8, 0, 0) }
         };
 
-        await _sut.RenameAsync(_tempFolder, photos);
+        await Rename(photos);
 
         Directory.EnumerateFiles(_tempFolder, "tour.csv.backup-*")
             .Should().HaveCount(1);
@@ -173,14 +234,14 @@ public class PhotoRenamerTests : IDisposable
         };
         _csvWriter.Write(csvPath, [original]);
 
-        var result = await _sut.RenameAsync(_tempFolder, [original]);
+        var result = await Rename([original]);
 
         result.Renamed.Should().ContainSingle();
 
         // CSV neu lesen
         var csvPhotos = _csvReader.Read(csvPath).ToList();
         csvPhotos.Should().HaveCount(1);
-        csvPhotos[0].Filename.Should().Be("2026_05_09_14_30_Villach.jpg");
+        csvPhotos[0].Filename.Should().Be("260509_143000_Villach.jpg");
         csvPhotos[0].State.Should().Be(PhotoState.Selected);
         csvPhotos[0].Title.Should().Be("Mein Titel");
         csvPhotos[0].Description.Should().Be("Meine Beschreibung");
@@ -199,11 +260,11 @@ public class PhotoRenamerTests : IDisposable
         };
 
         // Erster Lauf
-        var r1 = await _sut.RenameAsync(_tempFolder, [photo]);
+        var r1 = await Rename([photo]);
         r1.Renamed.Should().HaveCount(1);
 
         // Zweiter Lauf mit demselben Photo-Objekt (Filename wurde in-memory aktualisiert)
-        var r2 = await _sut.RenameAsync(_tempFolder, [photo]);
+        var r2 = await Rename([photo]);
         r2.SkippedAlreadyMatching.Should().ContainSingle();
         r2.Renamed.Should().BeEmpty();
     }
@@ -221,7 +282,7 @@ public class PhotoRenamerTests : IDisposable
             new() { Filename = "photo.jpg", DateTime = new DateTime(2026, 5, 1, 9, 0, 0) }
         };
 
-        await _sut.RenameAsync(_tempFolder, photos);
+        await Rename(photos);
 
         File.Exists(Path.Combine(backupDir, "original.heic")).Should().BeTrue("HEIC-Backup darf nicht angerührt werden");
     }

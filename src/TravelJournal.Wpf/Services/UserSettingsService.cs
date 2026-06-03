@@ -47,7 +47,9 @@ public sealed class UserSettingsService
 public sealed record UserSettings(
     string MapStyleId,
     string Language,
-    int    BoundsPaddingPercent)
+    int    BoundsPaddingPercent,
+    string RenamePrefix   = "",
+    string RenameTemplate = "{datetime}_{ort}")
 {
     public static readonly UserSettings Default = new("outdoor-v2", "de", 12);
 }
