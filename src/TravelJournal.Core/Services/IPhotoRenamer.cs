@@ -43,6 +43,11 @@ public sealed record RenameOptions(string Prefix, string Template)
 
         var template = string.IsNullOrWhiteSpace(Template) ? DefaultTemplate : Template;
 
+        // Ist ein Präfix gesetzt, die Vorlage referenziert ihn aber nicht,
+        // wird er automatisch vorangestellt – sonst bliebe das Präfix-Feld wirkungslos.
+        if (!string.IsNullOrEmpty(prefixPart) && !template.Contains("{prefix}"))
+            template = "{prefix}_" + template;
+
         var name = template
             .Replace("{prefix}",   prefixPart)
             .Replace("{datetime}", datePart)

@@ -96,6 +96,28 @@ public class PhotoRenamerTests : IDisposable
     }
 
     [Fact]
+    public async Task RenameAsync_PrefixWithDefaultTemplate_PrefixAutoPrepended()
+    {
+        CreateJpeg("img.jpg");
+        var photos = new List<Photo>
+        {
+            new()
+            {
+                Filename = "img.jpg",
+                DateTime = new DateTime(2026, 4, 27, 12, 22, 57),
+                Location = "Tarvis"
+            }
+        };
+
+        // Standardvorlage enthält kein {prefix} – der Präfix muss trotzdem greifen.
+        var options = new RenameOptions("rhodos", RenameOptions.DefaultTemplate);
+        var result  = await Rename(photos, options);
+
+        result.Renamed.Should().ContainSingle();
+        result.Renamed[0].NewFilename.Should().Be("rhodos_260427_122257_Tarvis.jpg");
+    }
+
+    [Fact]
     public async Task RenameAsync_CustomTemplate_OrtAndPrefixOnly()
     {
         CreateJpeg("img.jpg");

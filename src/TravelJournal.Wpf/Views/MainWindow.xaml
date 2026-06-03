@@ -427,7 +427,7 @@
                       <StackPanel>
                         <TextBlock Style="{StaticResource ToolbarLabelText}" Text="Präfix (optional)" Margin="0,8,0,2"/>
                         <TextBox Text="{Binding RenamePrefix, UpdateSourceTrigger=PropertyChanged}"
-                                 ToolTip="Fester Text, der über den Platzhalter {prefix} eingesetzt wird (z.B. rhodos)."
+                                 ToolTip="Fester Text am Anfang des Dateinamens (z.B. rhodos). Wird automatisch vorangestellt, auch ohne {prefix} in der Vorlage."
                                  Margin="0,0,0,8"/>
 
                         <TextBlock Style="{StaticResource ToolbarLabelText}" Text="Vorlage" Margin="0,0,0,2"/>
