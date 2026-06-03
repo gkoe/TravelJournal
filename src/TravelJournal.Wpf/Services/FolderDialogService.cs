@@ -1,4 +1,4 @@
-﻿using Ookii.Dialogs.Wpf;
+using Microsoft.Win32;
 
 namespace TravelJournal.Wpf.Services;
 
@@ -6,12 +6,11 @@ public class FolderDialogService : IFolderDialogService
 {
     public string? PickFolder(string? initialFolder = null)
     {
-        var dlg = new VistaFolderBrowserDialog
+        var dlg = new OpenFolderDialog
         {
-            Description = "Foto-Ordner auswählen",
-            UseDescriptionForTitle = true,
-            SelectedPath = initialFolder ?? string.Empty
+            Title = "Foto-Ordner auswählen",
+            InitialDirectory = initialFolder ?? string.Empty
         };
-        return dlg.ShowDialog() == true ? dlg.SelectedPath : null;
+        return dlg.ShowDialog() == true ? dlg.FolderName : null;
     }
 }
